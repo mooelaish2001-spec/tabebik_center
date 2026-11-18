@@ -1,4 +1,4 @@
-package app.tabibak.tabibak_center
+package com.tabebik.tabebik_center
 
 import io.flutter.embedding.android.FlutterActivity
 
