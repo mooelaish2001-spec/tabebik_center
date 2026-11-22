@@ -40,6 +40,15 @@ void main() {
       expect(state.can(3), isFalse);
     });
 
+    test('unauthenticated member cannot mutate a booking', () {
+      final state = Db()..me = null;
+      final booking = Booking(99, 0, 'مريض', '+249912345678', 'كشف', 'اليوم', '1000', '');
+
+      state.set(booking, 'مؤكد');
+
+      expect(booking.status, 'جديد');
+    });
+
     test('active manager receives all UI permissions', () {
       final state = Db();
       final manager = Member('مدير', '+249912345678', 0);
