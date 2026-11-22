@@ -422,6 +422,7 @@ class Db extends ChangeNotifier {
   }
 
   void set(Booking b, String s, {String note = '', String who = ''}) {
+    if (!can(0)) return;
     b.status = s;
     b.note = note;
     b.assigned = who;
@@ -482,6 +483,7 @@ class Db extends ChangeNotifier {
 
   /// إعادة إرسال طلب مرفوض بعد تعديل بياناته.
   void resubmit(CenterProfile c, String mgrName, Member? rec) {
+    if (!isManager) return;
     center = c;
     final m = manager;
     if (m != null) m.name = mgrName;
@@ -492,6 +494,7 @@ class Db extends ChangeNotifier {
 
   /// حذف حساب المركز وكل بياناته (متطلب متاجر التطبيقات). في الإنتاج يُنفَّذ على الخادم.
   void deleteAccount() {
+    if (!isManager) return;
     bookings.clear();
     docs.clear();
     beds.clear();
@@ -1255,6 +1258,7 @@ class _BookingDetailsState extends State<BookingDetails> {
   List<String> get options => b.type == 1 ? [for (final x in db.beds.where((x) => x.free && x.type == b.extra)) 'سرير ${x.no}'] : db.team(b.svc);
 
   void accept() {
+    if (!db.can(0)) return snack(context, 'ليست لديك صلاحية إدارة الحجوزات');
     if (b.type != 0 && sel == null) return snack(context, b.type == 1 ? 'اختر السرير أولاً' : 'اختر ${kWho[b.svc]} أولاً');
     if (b.type == 1) db.beds.firstWhere((x) => 'سرير ${x.no}' == sel).free = false;
     db.set(b, 'مؤكد', who: sel ?? '');
@@ -1263,6 +1267,7 @@ class _BookingDetailsState extends State<BookingDetails> {
   }
 
   void reject() {
+    if (!db.can(0)) return snack(context, 'ليست لديك صلاحية إدارة الحجوزات');
     const reasons = ['الطبيب غير متاح في هذا الموعد', 'لا توجد أسرّة متاحة', 'خارج نطاق التغطية', 'سبب آخر'];
     var r = 0;
     showModalBottomSheet(
@@ -2305,6 +2310,7 @@ class _CenterInfoState extends State<CenterInfoScreen> {
   }
 
   void save() {
+    if (!db.isManager) return snack(context, 'هذه العملية لمدير المركز فقط');
     if (n.text.trim().length < 3) return snack(context, 'أدخل اسم المركز');
     if (svc.isEmpty) return snack(context, 'اختر خدمة واحدة على الأقل');
     c
@@ -2406,6 +2412,7 @@ class _MemberState extends State<MemberForm> {
   }
 
   void save() {
+    if (!db.isManager) return snack(context, 'إدارة المستخدمين متاحة لمدير المركز فقط');
     if (n.text.trim().length < 3) return snack(context, 'أدخل اسم المستخدم');
     final p = m == null ? normPhone(ph.text) : m!.phone;
     if (p == null) return snack(context, 'أدخل رقم هاتف سوداني صحيحاً');
