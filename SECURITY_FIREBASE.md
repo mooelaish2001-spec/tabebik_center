@@ -53,3 +53,21 @@ Firebase transport encryption and at-rest encryption are platform protections, n
 - A separate medical-private write API requires an authenticated patient, explicit consent flag, and doctor UID; it stores the medical payload under bookings/{bookingId}/private/medical with patientUid/doctorUid metadata.
 - A revocation-request helper writes a patient-doctor grant revocation request.
 - IMPORTANT: these client helpers are preparatory only. Current Firestore rules intentionally deny booking/private/grant writes, and the main.dart booking flows still need to be migrated away from direct Firestore writes. Do not deploy or treat this as production-ready until backend authorization, consent grant lifecycle, encryption, rules and emulator tests are completed.
+
+
+## Center Cloud Functions backend — staged, not deployed
+The center repository now contains a Node.js 20 / TypeScript Functions codebase:
+- `setCenterMemberRole`: only an existing `platformAdmin: true` custom claim can assign a center role. It verifies that the center document is approved and uses Firebase UID.
+- `setCenterMemberActive`: a manager can deactivate a member only inside the manager's own center; deactivation also removes matching center role claims. Reactivation/role re-issuance remains a platform-admin operation.
+- `listCenterBookings`: requires center role claims and returns an explicit operational-field projection for that claim's center. It never reads private subcollections.
+- `updateCenterBooking`: checks center scope and applies a restrictive status-transition policy transactionally.
+
+### Important deployment and integration blockers
+- No function has been deployed. No Firebase rules were opened.
+- A trusted operator must provision the first platform administrator out-of-band using the Admin SDK after identity verification. No client-facing bootstrap endpoint exists.
+- The Flutter center app still has no verified Firebase Auth/custom-claims session flow wired to these callables. Do not treat its local/demo login as authentication and do not expose these operations from it yet.
+- The booking schema must be migrated so each `bookings/{id}` document contains operational fields only. The callable projection reduces accidental disclosure but cannot make a mixed-schema document safe for direct client reads.
+- Firestore index may be required for `centerId + createdAt desc`; create it only after validating the deployed query and index error.
+- Firebase Emulator authorization tests, real dependency installation/build, claims provisioning runbook, consent lifecycle, medical encryption/key management, and production security review remain required.
+
+The backend is a guarded first implementation, not a production-ready booking service. Keep the current deny-by-default Firestore and Storage rules until the remaining gates pass.
