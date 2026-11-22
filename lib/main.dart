@@ -452,12 +452,14 @@ class Db extends ChangeNotifier {
     return null;
   }
 
-  bool get isManager => me == null || me!.role == 0;
+  // UI gating only; trusted authorization must still be enforced by Firebase Rules/backend.
+  bool get isManager => me != null && me!.active && me!.role == 0;
 
   /// صلاحية المستخدم الحالي: 0 حجوزات · 1 أسرّة · 2 أخصائيون وخدمات · 3 تقارير. المدير يملك الكل.
   bool can(int perm) {
     final m = me;
-    return m == null || m.role == 0 || m.perms.contains(perm);
+    if (m == null || !m.active) return false;
+    return m.role == 0 || m.perms.contains(perm);
   }
 
   String newReq() => '${DateTime.now().year}${1000 + Random().nextInt(9000)}';
@@ -688,6 +690,11 @@ Widget authHeader(String sub, {IconData icon = Icons.local_hospital_rounded, Str
 
 /// بعد نجاح الدخول: المركز المعتمد → الرئيسية، وإلا شاشة حالة الطلب.
 void enterApp(BuildContext c, Member m) {
+  // Never enter with a stale, inactive, or detached local member record.
+  if (!m.active || !db.members.any((x) => identical(x, m) && x.active)) {
+    snack(c, 'هذا الحساب غير نشط أو لم يعد مرتبطاً بالمركز');
+    return;
+  }
   db.me = m;
   final Widget w = db.center.status == 1 ? const HomeScreen() : const PendingScreen();
   Navigator.pushAndRemoveUntil(c, MaterialPageRoute(builder: (_) => w), (r) => false);
