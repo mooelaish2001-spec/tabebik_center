@@ -18,24 +18,29 @@ const transitions: Record<string, Set<string>> = {
 const operationalKeys = [
   "bookingId", "patientUid", "centerId", "doctorLic", "doctorName",
   "serviceType", "dateIso", "time", "status", "price", "pay",
-  "arrived", "visit", "createdAt", "updatedAt"
+  "arrived", "createdAt", "updatedAt"
 ] as const;
 
 function requireIdentity(request: { auth?: { uid: string; token: Record<string, unknown> } }) {
   if (!request.auth) throw new HttpsError("unauthenticated", "تسجيل الدخول مطلوب.");
   return request.auth;
 }
-function requireCenterRole(auth: { uid: string; token: Record<string, unknown> }) {
+async function requireCenterRole(auth: { uid: string; token: Record<string, unknown> }) {
   const role = auth.token.role;
   const centerId = auth.token.centerId;
   if ((role !== "center_manager" && role !== "center_reception") ||
       typeof centerId !== "string" || !centerId.trim()) {
     throw new HttpsError("permission-denied", "حساب المركز غير معتمد.");
   }
+  const member = await db.doc(`centerMembers/${auth.uid}`).get();
+  if (!member.exists || member.get("active") !== true ||
+      member.get("centerId") !== centerId || member.get("role") !== role) {
+    throw new HttpsError("permission-denied", "عضوية المركز غير نشطة أو غير متطابقة.");
+  }
   return { role: role as CenterRole, centerId };
 }
-function requireManager(auth: { uid: string; token: Record<string, unknown> }) {
-  const membership = requireCenterRole(auth);
+async function requireManager(auth: { uid: string; token: Record<string, unknown> }) {
+  const membership = await requireCenterRole(auth);
   if (membership.role !== "center_manager") {
     throw new HttpsError("permission-denied", "هذه العملية متاحة لمدير المركز فقط.");
   }
@@ -62,7 +67,7 @@ export const setCenterMemberRole = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "uid, centerId and a valid role are required.");
   }
   const center = await db.doc(`centers/${centerId}`).get();
-  if (!center.exists || center.get("status") !== "approved") {
+  if (!center.exists || center.get("status") !== 1) {
     throw new HttpsError("failed-precondition", "Center is not approved.");
   }
   const user = await getAuth().getUser(uid);
@@ -80,7 +85,7 @@ export const setCenterMemberRole = onCall(async (request) => {
 /** Manager can manage only members belonging to their own center. */
 export const setCenterMemberActive = onCall(async (request) => {
   const auth = requireIdentity(request);
-  const manager = requireManager(auth);
+  const manager = await requireManager(auth);
   const { uid, active } = request.data ?? {};
   if (typeof uid !== "string" || typeof active !== "boolean" || uid === auth.uid) {
     throw new HttpsError("invalid-argument", "A different member uid and boolean active are required.");
@@ -108,7 +113,7 @@ export const setCenterMemberActive = onCall(async (request) => {
 /** Returns an allowlisted operational projection only; never returns private/medical subcollections. */
 export const listCenterBookings = onCall(async (request) => {
   const auth = requireIdentity(request);
-  const { centerId } = requireCenterRole(auth);
+  const { centerId } = await requireCenterRole(auth);
   const snap = await db.collection("bookings")
     .where("centerId", "==", centerId)
     .orderBy("createdAt", "desc")
@@ -120,7 +125,7 @@ export const listCenterBookings = onCall(async (request) => {
 /** Role-scoped, transactional status update with a strict field allowlist. */
 export const updateCenterBooking = onCall(async (request) => {
   const auth = requireIdentity(request);
-  const membership = requireCenterRole(auth);
+  const membership = await requireCenterRole(auth);
   const { bookingId, status } = request.data ?? {};
   if (typeof bookingId !== "string" || !bookingId.trim() ||
       typeof status !== "string" || !allowedStatuses.has(status)) {
