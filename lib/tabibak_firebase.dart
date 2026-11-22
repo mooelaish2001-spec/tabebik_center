@@ -22,6 +22,7 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -40,6 +41,7 @@ class Fb {
 
   static FirebaseFirestore get _db => FirebaseFirestore.instance;
   static FirebaseAuth get _auth => FirebaseAuth.instance;
+  static FirebaseFunctions get _functions => FirebaseFunctions.instance;
 
   static User? get user => on ? _auth.currentUser : null;
   static String? get uid => user?.uid;
@@ -301,7 +303,51 @@ class Fb {
   }
 
   static Stream<List<Map<String, dynamic>>> bookingsOfPatient(String uid) => _watch(_db.collection('bookings').where('patientUid', isEqualTo: uid));
-  static Stream<List<Map<String, dynamic>>> bookingsOfCenter(String centerId) => _watch(_db.collection('bookings').where('centerId', isEqualTo: centerId));
+  /// Center identity is derived from verified Firebase custom claims, never local UI state.
+  static Future<String> verifiedCenterId() async {
+    final current = _auth.currentUser;
+    if (!on || current == null) throw StateError('يلزم تسجيل دخول Firebase موثوق.');
+    final result = await current.getIdTokenResult(true);
+    final claims = result.claims ?? const <String, dynamic>{};
+    final role = claims['role'];
+    final centerId = claims['centerId'];
+    if ((role != 'center_manager' && role != 'center_reception') ||
+        centerId is! String || centerId.trim().isEmpty) {
+      throw StateError('هذا الحساب غير مرتبط بمركز معتمد.');
+    }
+    return centerId;
+  }
+
+  /// Fetches an operational-only projection through the server.
+  static Future<List<Map<String, dynamic>>> fetchCenterBookings() async {
+    await verifiedCenterId();
+    final result = await _functions.httpsCallable('listCenterBookings').call();
+    final data = Map<String, dynamic>.from(result.data as Map);
+    final rows = (data['bookings'] as List? ?? const []);
+    return rows.map((row) => Map<String, dynamic>.from(row as Map)).toList();
+  }
+
+  static Future<void> updateCenterBookingStatus(String bookingId, String status) async {
+    if (bookingId.trim().isEmpty) throw ArgumentError('bookingId is required.');
+    await verifiedCenterId();
+    await _functions.httpsCallable('updateCenterBooking').call({
+      'bookingId': bookingId,
+      'status': status,
+    });
+  }
+
+  static Future<void> setCenterMemberActive(String uid, bool active) async {
+    if (uid.trim().isEmpty) throw ArgumentError('uid is required.');
+    await verifiedCenterId();
+    await _functions.httpsCallable('setCenterMemberActive').call({
+      'uid': uid,
+      'active': active,
+    });
+  }
+
+  @Deprecated('Use fetchCenterBookings; center reads are server-authorized.')
+  static Stream<List<Map<String, dynamic>>> bookingsOfCenter(String centerId) =>
+      Stream.error(StateError('Direct center booking reads are disabled. Use fetchCenterBookings().'));
   static Stream<List<Map<String, dynamic>>> bookingsOfDoctor(String lic) => _watch(_db.collection('bookings').where('doctorLic', isEqualTo: lic));
 
   // ───────────────────────── الصور (إشعارات التحويل) ─────────────────────────
