@@ -784,7 +784,7 @@ Future<void> main() async {
   await Fb.init();
   if (Fb.on) {
     db.clearDemoForLive();
-    final phone = Fb.phone;
+    final phone = await Fb.accountPhone;
     if (phone.isNotEmpty) {
       await db.restoreRemoteSession(phone);
     }
