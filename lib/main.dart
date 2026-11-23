@@ -955,20 +955,9 @@ class PendingScreen extends StatelessWidget {
                   if (cn.status == 2) panel([Text('سبب الرفض', style: t(13, c: kAmber)), gap(4), Text(cn.reason, style: t(13, w: FontWeight.w500, h: 1.6))]),
                   if (cn.status == 0)
                     panel([
-                      Text('وضع تجريبي', style: t(12.5, c: kAmber)),
+                      Text('بانتظار قرار إدارة طبيبك', style: t(12.5, c: kAmber)),
                       gap(4),
-                      Text('قرار الاعتماد يصدر من لوحة إدارة طبيبك. استخدم الزرين التاليين لمحاكاته:', style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6)),
-                      gap(10),
-                      btn('محاكاة: اعتماد المركز', () {
-                        cn.status = 1;
-                        db.ping();
-                      }, h: 44),
-                      gap(8),
-                      btn('محاكاة: رفض الطلب', () {
-                        cn.status = 2;
-                        cn.reason = 'صورة شهادة الترخيص غير واضحة، أعد رفعها.';
-                        db.ping();
-                      }, outline: true, h: 44),
+                      Text('لا يمكن اعتماد المركز من هذا التطبيق. يتم تحديث حالة الطلب بعد مراجعة الترخيص من إدارة المنصة.', style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6)),
                     ]),
                   if (cn.status == 1) btn('ابدأ الآن', () => Navigator.pushAndRemoveUntil(c, MaterialPageRoute(builder: (_) => const HomeScreen()), (r) => false)),
                   if (cn.status == 2) ...[
