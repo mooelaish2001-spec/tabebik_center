@@ -983,7 +983,7 @@ class _LoginScreenState extends State<LoginScreen> {
             child: ListView(padding: const EdgeInsets.fromLTRB(24, 24, 24, 16), children: [
               Center(child: Text('تسجيل دخول المركز', style: t(21, w: FontWeight.w800))),
               gap(4),
-              Center(child: Text('الدخول بمفتاح المرور باستخدام بصمة الإصبع أو الوجه أو رمز قفل الجهاز. لا توجد رسائل SMS أو OTP.', textAlign: TextAlign.center, style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6))),
+              Center(child: Text('الدخول بمفتاح المرور باستخدام بصمة الإصبع أو الوجه أو رمز قفل الجهاز. لا نرسل رسائل SMS.', textAlign: TextAlign.center, style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6))),
               phoneFld('رقم الهاتف المرتبط بعضوية المركز', u),
               gap(18),
               btn(busy ? 'جارٍ التحقق...' : 'الدخول بمفتاح المرور', next),
@@ -1008,7 +1008,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ]),
       );
 }
-// ── Register 1/2: رقم هاتف المدير + OTP ──
+// ── Register 1/2: رقم هاتف المدير + Passkey ──
 class RegisterPhoneScreen extends StatefulWidget {
   const RegisterPhoneScreen({super.key, this.initial = ''});
   final String initial;
@@ -2689,7 +2689,7 @@ class UsersScreen extends StatelessWidget {
           body: !db.isManager
               ? empty(Icons.lock_rounded, 'هذه الصفحة لمدير المركز فقط')
               : ListView(padding: const EdgeInsets.all(16), children: [
-                  panel([Text('كل مستخدم يدخل برقم هاتفه ومفتاح مرور (OTP) بدون بريد إلكتروني. حدّد لموظف الاستقبال ما يستطيع فعله.', style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6))]),
+                  panel([Text('كل مستخدم يدخل برقم هاتفه ومفتاح مرور بدون بريد إلكتروني. حدّد لموظف الاستقبال ما يستطيع فعله.', style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6))]),
                   for (final m in db.members)
                     GestureDetector(
                       onTap: () => go(c, MemberForm(m: m)),
