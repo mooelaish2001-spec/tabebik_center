@@ -4,7 +4,15 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function isPatient() { return signedIn() && request.auth.token.role == 'patient'; }
     function isDoctor() { return signedIn() && request.auth.token.role == 'doctor' && request.auth.token.doctorLic is string; }
-    function isCenterStaff() { return signedIn() && request.auth.token.role in ['center_manager', 'center_reception'] && request.auth.token.centerId is string; }
+    function isCenterStaff() {
+      return signedIn()
+        && request.auth.token.role in ['center_manager', 'center_reception']
+        && request.auth.token.centerId is string
+        && exists(/databases/$(database)/documents/centerMembers/$(request.auth.uid))
+        && get(/databases/$(database)/documents/centerMembers/$(request.auth.uid)).data.active == true
+        && get(/databases/$(database)/documents/centerMembers/$(request.auth.uid)).data.centerId == request.auth.token.centerId
+        && get(/databases/$(database)/documents/centerMembers/$(request.auth.uid)).data.role == request.auth.token.role;
+    }
     function isPlatformAdmin() { return signedIn() && request.auth.token.platformAdmin == true; }
 
     // Public directory: only approved/verified records are visible.
