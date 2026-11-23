@@ -82,3 +82,7 @@ The backend is a guarded first implementation, not a production-ready booking se
 - The center cannot mark a doctor appointment completed; only the assigned doctor can complete an in-person visit and issue the encounter code.
 - firestore.indexes.json includes the centerId + createdAt descending index used by the booking inbox.
 - No Functions or rules have been deployed, and the Firestore/Storage rules remain fail-closed.
+
+- Both Firestore and Storage center-staff helpers now verify the active centerMembers/{uid} document matches the custom-claim centerId and role, so a stale ID token alone does not preserve access after membership deactivation.
+- Firebase Console must have Anonymous Authentication enabled for the center app's first-run UID bootstrap. This does not verify a phone number or legal identity; platform staff must verify the operator independently before assigning claims.
+- The repository intentionally still excludes firebase_options.dart and android/app/google-services.json pending the owner's upload. Firebase initialization and a device APK build cannot be verified until those real project configuration files are supplied.
