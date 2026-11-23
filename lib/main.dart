@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -1145,7 +1146,9 @@ class _WizardState extends State<RegisterWizard> {
   late final kind = {pre?.kind ?? 1}, svc = {...(pre?.svc ?? {0, 1, 2})};
   late int state = pre?.state ?? 0;
   late bool self = widget.again && db.reception == null;
-  bool docOk = false, agree = false;
+  Uint8List? licenseBytes;
+  bool get docOk => licenseBytes != null;
+  bool agree = false;
 
   @override
   void dispose() {
@@ -1183,27 +1186,82 @@ class _WizardState extends State<RegisterWizard> {
     return null;
   }
 
-  void next() {
+  Future<void> next() async {
     final e = check();
     if (e != null) return snack(context, e);
     if (step < 2) {
       setState(() => step++);
       toTop();
     } else {
-      submit();
+      await submit();
     }
   }
 
-  void submit() {
-    final c = CenterProfile(
+  Future<void> submit() async {
+    final profile = CenterProfile(
       name: n.text.trim(), kind: kind.first, lic: lic.text.trim(), state: state, locality: loc.text.trim(), address: adr.text.trim(),
       phone: cph.text.trim(), from: from.text.trim(), to: to.text.trim(), svc: {...svc}, status: 0, reqNo: db.newReq(), docAttached: docOk,
     );
     final rec = self ? null : Member(rn.text.trim(), normPhone(rp.text)!, 1);
+    if (Fb.on) {
+      if (Fb.uid == null || Fb.phone != widget.phone || licenseBytes == null) {
+        return snack(context, 'تحقق من رقم المدير وأرفق صورة الترخيص الفعلية قبل الإرسال');
+      }
+      try {
+        final id = Fb.newCenterId();
+        final licensePath = await Fb.uploadPrivate(
+          'licenses/$id/${DateTime.now().millisecondsSinceEpoch}.jpg',
+          licenseBytes!,
+        );
+        await Fb.createCenter(id, {
+          'name': profile.name,
+          'kind': profile.kind,
+          'lic': profile.lic,
+          'state': profile.state,
+          'city': profile.locality,
+          'address': profile.address,
+          'phone': profile.phone,
+          'from': profile.from,
+          'to': profile.to,
+          'svc': profile.svc.toList(),
+          'status': 0,
+          'reqNo': profile.reqNo,
+          'managerUid': Fb.uid,
+          'managerPhone': widget.phone,
+          'licensePath': licensePath,
+        }, widget.phone, {
+          'uid': Fb.uid,
+          'centerId': id,
+          'phone': widget.phone,
+          'name': mgr.text.trim(),
+          'role': 0,
+          'perms': [0, 1, 2, 3],
+          'active': true,
+        });
+        if (rec != null) {
+          await Fb.saveMember(rec.phone, {
+            'uid': '',
+            'centerId': id,
+            'phone': rec.phone,
+            'name': rec.name,
+            'role': 1,
+            'perms': [0, 1],
+            'active': true,
+          });
+        }
+        db.clearDemoForLive();
+        await db.restoreRemoteSession(widget.phone);
+        if (!mounted) return;
+        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const PendingScreen()), (r) => false);
+      } catch (e) {
+        if (mounted) snack(context, 'تعذّر إرسال طلب التسجيل: ${e.toString()}');
+      }
+      return;
+    }
     if (widget.again) {
-      db.resubmit(c, mgr.text.trim(), rec);
+      db.resubmit(profile, mgr.text.trim(), rec);
     } else {
-      db.register(c, Member(mgr.text.trim(), widget.phone, 0), rec);
+      db.register(profile, Member(mgr.text.trim(), widget.phone, 0), rec);
     }
     Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const PendingScreen()), (r) => false);
   }
@@ -1243,11 +1301,13 @@ class _WizardState extends State<RegisterWizard> {
           child: Row(children: [
             tile(docOk ? Icons.check_circle_rounded : Icons.upload_file_rounded, size: 40),
             const SizedBox(width: 12),
-            Expanded(child: two('صورة شهادة الترخيص', docOk ? 'ترخيص_المركز.jpg' : 'صورة واضحة وسارية المفعول')),
+            Expanded(child: two('صورة شهادة الترخيص', docOk ? 'تم إرفاق صورة الترخيص' : 'صورة واضحة وسارية المفعول')),
             GestureDetector(
-              onTap: () {
-                setState(() => docOk = !docOk);
-                if (docOk) snack(context, 'نموذج تجريبي: في النسخة الفعلية يُفتح معرض الصور أو الكاميرا');
+              onTap: () async {
+                final bytes = await Fb.pickImage();
+                if (bytes == null) return;
+                if (!mounted) return;
+                setState(() => licenseBytes = bytes);
               },
               child: Text(docOk ? 'إزالة' : 'إرفاق', style: t(13, c: kRed)),
             ),
