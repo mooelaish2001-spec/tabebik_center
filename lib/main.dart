@@ -498,7 +498,13 @@ class Db extends ChangeNotifier {
               active: r['active'] != false,
             ),
         ]);
-      me = members.where((m) => m.phone == currentPhone).firstOrNull;
+      me = null;
+      for (final member in members) {
+        if (member.phone == currentPhone) {
+          me = member;
+          break;
+        }
+      }
       notifyListeners();
     });
     _remoteMemberships = Fb.membershipsOfCenter(remoteCenterId).listen((rows) async {
