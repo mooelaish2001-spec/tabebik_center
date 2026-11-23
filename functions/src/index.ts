@@ -42,7 +42,7 @@ function cleanOperationalBooking(id: string, data: FirebaseFirestore.DocumentDat
   const result: Record<string, unknown> = { bookingId: id };
   for (const key of operationalKeys) if (data[key] !== undefined) result[key] = data[key];
   result.patientName = typeof data.name === "string" ? data.name : "";
-  result.serviceType = Number(data.type) === 1 ? "bed" : Number(data.type) === 2 ? "home" : "doctor";
+  result.serviceType = Number(data.type) === 1 ? "bed" : Number(data.type) === 2 ? (Number(data.svc) === 2 ? "lab" : "home") : "doctor";
   result.status = storedToStatus[String(data.status ?? "")] ?? String(data.status ?? "");
   return result;
 }
@@ -135,6 +135,9 @@ export const updateCenterBooking = onCall(async (request) => {
     const target = statusToStored[status];
     if (!canTransition(current, status)) {
       throw new HttpsError("failed-precondition", "Invalid booking status transition.");
+    }
+    if (status === "completed" && Number(snap.get("type") ?? 0) === 0) {
+      throw new HttpsError("failed-precondition", "Doctor appointments can only be completed by the assigned doctor after the in-person encounter.");
     }
     if (status === "confirmed" && price === undefined && Number(snap.get("price") ?? 0) <= 0) {
       throw new HttpsError("failed-precondition", "Set the center-approved price before confirming the booking.");
