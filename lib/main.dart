@@ -885,7 +885,22 @@ class _LoginScreenState extends State<LoginScreen> {
   void next() {
     final ph = normPhone(u.text);
     if (ph == null) return snack(context, 'أدخل رقم هاتف سوداني صحيحاً (مثال: 912345678)');
-    // ملاحظة: في الإنتاج لا يكشف الخادم هل الرقم مسجّل أم لا (منعاً لتعداد الأرقام)؛ هنا نوضّح للمستخدم لأنها نسخة تجريبية.
+    if (Fb.on) {
+      // لا نكشف إن كان الرقم مسجلاً قبل إثبات ملكيته برمز SMS.
+      go(context, OtpScreen(ph, (ctx) async {
+        final ok = await db.loginRemote(ph);
+        if (!ctx.mounted) return;
+        if (!ok || db.me == null) {
+          await Fb.signOut();
+          if (!ctx.mounted) return;
+          snack(ctx, 'لا يوجد حساب مركز فعّال لهذا الرقم، أو أن الحساب موقوف. يمكنك تسجيل مركز جديد.');
+          Navigator.pushAndRemoveUntil(ctx, MaterialPageRoute(builder: (_) => RegisterPhoneScreen(initial: u.text)), (r) => false);
+          return;
+        }
+        enterApp(ctx, db.me!);
+      }));
+      return;
+    }
     final m = db.memberByPhone(ph);
     if (m == null) {
       confirm(context, 'هذا الرقم غير مسجّل', 'لا يوجد حساب مركز بهذا الرقم. تأكد من الرقم أو سجّل مركزك الآن.', 'تسجيل مركز جديد', () => go(context, RegisterPhoneScreen(initial: u.text)));
@@ -1076,7 +1091,7 @@ class _RegPhoneState extends State<RegisterPhoneScreen> {
   void next() {
     final ph = normPhone(p.text);
     if (ph == null) return snack(context, 'أدخل رقم هاتف سوداني صحيحاً (مثال: 912345678)');
-    if (db.memberByPhone(ph) != null) return snack(context, 'هذا الرقم مسجّل مسبقاً — سجّل الدخول بدلاً من ذلك');
+    if (!Fb.on && db.memberByPhone(ph) != null) return snack(context, 'هذا الرقم مسجّل مسبقاً — سجّل الدخول بدلاً من ذلك');
     go(context, OtpScreen(ph, (c) => Navigator.pushReplacement(c, MaterialPageRoute(builder: (_) => RegisterWizard(ph)))));
   }
 
