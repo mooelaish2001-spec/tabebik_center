@@ -3,13 +3,13 @@
 //  ضع هذا الملف نفسه في lib/ لكل مشروع، واستورده:  import 'tabibak_firebase.dart';
 //
 //  • كل التطبيقات تتعامل مع Firebase عبر الصنف Fb فقط (خرائط Map عادية بلا أنواع Firestore).
-//  • إن لم يكن Firebase مهيّأً (لا google-services.json) تبقى Fb.on = false وتعمل التطبيقات بالوضع التجريبي المحلي.
+//  • إن لم يكن Firebase مهيّأً تبقى Fb.on = false ويُمنع الدخول إلى وظائف المركز؛ لا يوجد fallback تجريبي.
 //
 //  Collections:
 //    users/{uid}                      ملف المريض (الاسم، الصحة...)
 //    centers/{centerId}               المركز: status 0 معلّق · 1 معتمد · 2 مرفوض  (الاعتماد من لوحة Firebase فقط)
 //    centers/{centerId}/private/bank  حساب المركز البنكي (للمركز فقط؛ يُنسخ للحجز عند التأكيد)
-//    centerMembers/{+249...}          مستخدمو المركز (مدير/استقبال) — المفتاح هاتفهم
+//    centerMembers/{uid}              عضوية المركز — المفتاح Firebase UID، وتدار من الخادم
 //    doctors/{lic}                    الملف العام للطبيب (verified يضعه فريق طبيبك بعد مراجعة بطاقة المجلس)
 //    doctorKeys/{lic}                 هاتف الطبيب المسجّل (لا يقرؤه إلا صاحبه أو المركز الذي سجّله)
 //    memberships/{lic}_{centerId}     عضوية طبيب في مركز بشروطها (status: active · requestedByDoctor · invitedByCenter · offApp · removed)
