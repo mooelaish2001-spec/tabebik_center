@@ -1090,24 +1090,126 @@ class BookingsScreen extends StatefulWidget {
 }
 
 class _BookingsState extends State<BookingsScreen> {
-  final type = {0}, st = {0};
-  static const sts = ['الكل', 'جديد', 'مؤكد', 'مكتمل', 'مرفوض'];
+  late Future<List<Map<String, dynamic>>> _future;
+
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-        animation: db,
-        builder: (c, _) {
-          final list = db.bookings.where((b) => (type.first == 0 || b.type == type.first - 1) && (st.first == 0 || b.status == sts[st.first])).toList();
-          return RPage(
-            'الحجوزات',
-            nav: 1,
-            body: Column(children: [
-              Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8), child: chips(['الكل', ...kTypes], type, () => setState(() {}))),
-              Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 8), child: chips(sts, st, () => setState(() {}))),
-              Expanded(child: list.isEmpty ? empty(Icons.inbox_rounded, 'لا توجد حجوزات مطابقة') : ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8), children: [for (final b in list) BookingCard(b)])),
+  void initState() {
+    super.initState();
+    _future = Fb.fetchCenterBookings();
+  }
+
+  Future<void> _reload() async {
+    final next = Fb.fetchCenterBookings();
+    setState(() => _future = next);
+    await next;
+  }
+
+  String _statusLabel(Object? raw) {
+    switch (raw) {
+      case 'pending': return 'جديد';
+      case 'confirmed': return 'مؤكد';
+      case 'completed': return 'مكتمل';
+      case 'rejected': return 'مرفوض';
+      case 'cancelled': return 'ملغي';
+      default: return 'غير معروف';
+    }
+  }
+
+  String _serviceLabel(Map<String, dynamic> row) {
+    final value = (row['serviceType'] ?? '').toString();
+    switch (value) {
+      case 'doctor': return 'حجز طبيب';
+      case 'bed': return 'حجز سرير';
+      case 'home': return 'خدمة منزلية';
+      case 'lab': return 'خدمة مختبر';
+      default: return value.isEmpty ? 'حجز خدمة' : value;
+    }
+  }
+
+  Future<void> _change(Map<String, dynamic> row, String status) async {
+    final id = (row['bookingId'] ?? '').toString();
+    if (id.isEmpty) return snack(context, 'رقم الحجز غير موجود');
+    try {
+      await Fb.updateCenterBookingStatus(id, status);
+      await _reload();
+      if (mounted) snack(context, 'تم تحديث حالة الحجز على الخادم');
+    } catch (e) {
+      if (mounted) snack(context, 'لم يتم تحديث الحجز: $e');
+    }
+  }
+
+  Widget _bookingCard(Map<String, dynamic> row) {
+    final status = (row['status'] ?? '').toString();
+    final uid = (row['patientUid'] ?? '').toString();
+    final patientRef = uid.length > 6 ? '…${uid.substring(uid.length - 6)}' : (uid.isEmpty ? 'غير متاح' : uid);
+    final doctor = (row['doctorName'] ?? '').toString();
+    final when = [row['dateIso'], row['time']].where((v) => v != null && v.toString().isNotEmpty).join(' · ');
+    final price = (row['price'] ?? '').toString();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: card(),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          tile(Icons.event_note_rounded),
+          const SizedBox(width: 10),
+          Expanded(child: two(_serviceLabel(row), 'مرجع المريض: $patientRef')),
+          badge(_statusLabel(status)),
+        ]),
+        if (doctor.isNotEmpty) ...[gap(8), kv('الأخصائي', doctor)],
+        if (when.isNotEmpty) kv('الموعد', when),
+        if (price.isNotEmpty) kv('السعر', '$price ج.س', bold: true),
+        gap(8),
+        if (status == 'pending') Row(children: [
+          Expanded(child: btn('تأكيد الحجز', () => _change(row, 'confirmed'), h: 42)),
+          const SizedBox(width: 8),
+          Expanded(child: btn('رفض', () => _change(row, 'rejected'), outline: true, h: 42)),
+        ]) else if (status == 'confirmed')
+          btn('تأكيد إكمال الخدمة', () => _change(row, 'completed'), h: 42),
+      ]),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => RPage(
+    'الحجوزات',
+    nav: 1,
+    body: FutureBuilder<List<Map<String, dynamic>>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              tile(Icons.cloud_off_rounded, size: 72),
+              gap(12),
+              Text('تعذر تحميل الحجوزات من الخادم', style: t(15, w: FontWeight.w800)),
+              gap(6),
+              Text('${snapshot.error}', textAlign: TextAlign.center, style: t(11.5, w: FontWeight.w500, c: kGrey)),
+              gap(14),
+              btn('إعادة المحاولة', _reload),
             ]),
-          );
-        },
-      );
+          ));
+        }
+        final rows = snapshot.data ?? const <Map<String, dynamic>>[];
+        if (rows.isEmpty) return Center(child: empty(Icons.inbox_rounded, 'لا توجد حجوزات مسندة لهذا المركز'));
+        return RefreshIndicator(
+          onRefresh: _reload,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Text('الحجوزات المحمّلة من الخادم: ${rows.length}', style: t(12, w: FontWeight.w600, c: kGrey)),
+              gap(10),
+              for (final row in rows) _bookingCard(row),
+            ],
+          ),
+        );
+      },
+    ),
+  );
 }
 
 // ═══════════════ 4. Booking details + accept / reject / complete ═══════════════
