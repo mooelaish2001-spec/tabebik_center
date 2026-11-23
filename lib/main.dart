@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'tabibak_firebase.dart';
 
 // ═══════════════ طبيبك — تطبيق المركز (Center app) ═══════════════
 // يستخدم نفس تصميم تطبيق المستخدمين. البيانات في الذاكرة (Db) وتتحدّث لحظياً بين الشاشات.
@@ -595,13 +596,24 @@ class OtpService {
 final otp = OtpService();
 
 // ═══════════════ Shell ═══════════════
-void main() => runApp(MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'طبيبك للمراكز',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: kRed, scaffoldBackgroundColor: Colors.white, textTheme: GoogleFonts.cairoTextTheme(ThemeData.light().textTheme)),
-      builder: (c, child) => Directionality(textDirection: TextDirection.rtl, child: child!),
-      home: const LoginScreen(),
-    ));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Fb.init();
+  if (Fb.on) {
+    db.clearDemoForLive();
+    final phone = Fb.phone;
+    if (phone.isNotEmpty) {
+      await db.restoreRemoteSession(phone);
+    }
+  }
+  runApp(MaterialApp(
+    debugShowCheckedModeBanner: false,
+    title: 'طبيبك للمراكز',
+    theme: ThemeData(useMaterial3: true, colorSchemeSeed: kRed, scaffoldBackgroundColor: Colors.white, textTheme: GoogleFonts.cairoTextTheme(ThemeData.light().textTheme)),
+    builder: (c, child) => Directionality(textDirection: TextDirection.rtl, child: child!),
+    home: db.me == null ? const LoginScreen() : (db.center.status == 1 ? const HomeScreen() : const PendingScreen()),
+  ));
+}
 
 const roots = <Widget>[HomeScreen(), BookingsScreen(), ManageScreen(), AccountScreen()];
 
@@ -793,7 +805,6 @@ class _OtpState extends State<OtpScreen> {
   }
 
   void send() {
-    demoCode = otp.send(widget.phone);
     ctl.clear();
     err = null;
     left = 60;
@@ -806,13 +817,40 @@ class _OtpState extends State<OtpScreen> {
       setState(() => left--);
       if (left <= 0) tm.cancel();
     });
+    if (Fb.on) {
+      Fb.sendCode(widget.phone, onSent: () {
+        if (mounted) setState(() => err = null);
+      }, onError: (m) {
+        if (mounted) setState(() => err = m);
+      }, onAuto: () {
+        if (mounted) {
+          busy = true;
+          widget.onVerified(context);
+        }
+      });
+    } else {
+      demoCode = otp.send(widget.phone);
+    }
   }
 
-  void verify() {
+  Future<void> verify() async {
     if (busy) return;
     final code = latin(ctl.text).trim();
     if (code.length != 6) {
       setState(() => err = 'أدخل الرمز المكوّن من 6 أرقام');
+      return;
+    }
+    if (Fb.on) {
+      setState(() => busy = true);
+      final e = await Fb.verify(code);
+      if (e != null) {
+        if (mounted) setState(() {
+          busy = false;
+          err = e;
+        });
+        return;
+      }
+      if (mounted) widget.onVerified(context);
       return;
     }
     final e = otp.check(widget.phone, code);
