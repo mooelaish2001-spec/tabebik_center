@@ -2366,7 +2366,7 @@ class UsersScreen extends StatelessWidget {
           body: !db.isManager
               ? empty(Icons.lock_rounded, 'هذه الصفحة لمدير المركز فقط')
               : ListView(padding: const EdgeInsets.all(16), children: [
-                  panel([Text('كل مستخدم يدخل برقم هاتفه ورمز تحقق (OTP) بدون بريد إلكتروني. حدّد لموظف الاستقبال ما يستطيع فعله.', style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6))]),
+                  panel([Text('حسابات الموظفين تُنشأ وتُربط بمعرّفات Firebase وصلاحياتها من إدارة المنصة بعد التحقق الإداري. هذه الشاشة لا تنشئ حسابات فعلية حالياً.', style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6))]),
                   for (final m in db.members)
                     GestureDetector(
                       onTap: () => go(c, MemberForm(m: m)),
