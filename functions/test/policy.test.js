@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {canTransition, statusToStored, storedToStatus} from "../lib/policy.js";
+import {canTransition, canSetPrice, canCenterCompleteBooking, statusToStored, storedToStatus} from "../lib/policy.js";
 
 test("center API status values map to the Arabic booking schema", () => {
   assert.equal(statusToStored.pending, "جديد");
@@ -28,4 +28,16 @@ test("center booking projection allowlist excludes medical payload keys", () => 
   for (const key of ["complaint", "diagnosis", "medicalHistory", "medical", "private", "visit"]) {
     assert.equal(allowed.has(key), false, key);
   }
+});
+
+test("center can set a price only while confirming a new booking", () => {
+  assert.equal(canSetPrice("جديد", "confirmed"), true);
+  assert.equal(canSetPrice("مؤكد", "confirmed"), false);
+  assert.equal(canSetPrice("جديد", "rejected"), false);
+});
+
+test("center cannot complete doctor appointments", () => {
+  assert.equal(canCenterCompleteBooking(0), false);
+  assert.equal(canCenterCompleteBooking(1), true);
+  assert.equal(canCenterCompleteBooking(2), true);
 });
