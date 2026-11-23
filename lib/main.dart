@@ -1134,6 +1134,7 @@ class _BookingsState extends State<BookingsScreen> {
       case 'doctor': return 'حجز طبيب';
       case 'bed': return 'حجز سرير';
       case 'home': return 'خدمة منزلية';
+      case 'lab': return 'خدمة مختبر';
       default: return 'حجز خدمة';
     }
   }
@@ -1206,7 +1207,8 @@ class _BookingsState extends State<BookingsScreen> {
           ]),
         ] else ...[
           if (price.isNotEmpty) kv('السعر المعتمد', '$price ج.س', bold: true),
-          if (status == 'confirmed') btn('تأكيد إكمال الخدمة', () => _change(row, 'completed'), h: 42),
+          if (status == 'confirmed' && (row['serviceType'] ?? '') != 'doctor')
+            btn('تأكيد إكمال الخدمة', () => _change(row, 'completed'), h: 42),
         ],
       ]),
     );
