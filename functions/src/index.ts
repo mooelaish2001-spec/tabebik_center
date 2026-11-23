@@ -2,6 +2,7 @@ import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
+import {statusToStored, storedToStatus, canTransition, canSetPrice, canCenterCompleteBooking} from "./policy.js";
 
 initializeApp();
 const db = getFirestore();
