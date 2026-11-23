@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// TEMPORARY SAFE BASELINE.
+// This denies all client access. Do NOT deploy as production rules while the
+// apps require Firestore access. Create and test coordinated role-based rules
+// for all three apps before deployment; Firestore rules are project-wide.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
