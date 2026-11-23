@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'tabibak_firebase.dart';
 
 // ═══════════════ طبيبك — تطبيق المركز (Center app) ═══════════════
 // يستخدم نفس تصميم تطبيق المستخدمين. البيانات في الذاكرة (Db) وتتحدّث لحظياً بين الشاشات.
@@ -343,9 +344,7 @@ class Member {
 }
 
 class Db extends ChangeNotifier {
-  Db() {
-    loadDemo();
-  }
+  Db();
 
   CenterProfile center = CenterProfile();
   Member? me; // المستخدم المسجّل دخوله
@@ -600,13 +599,17 @@ class OtpService {
 final otp = OtpService();
 
 // ═══════════════ Shell ═══════════════
-void main() => runApp(MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'طبيبك للمراكز',
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: kRed, scaffoldBackgroundColor: Colors.white, textTheme: GoogleFonts.cairoTextTheme(ThemeData.light().textTheme)),
-      builder: (c, child) => Directionality(textDirection: TextDirection.rtl, child: child!),
-      home: const LoginScreen(),
-    ));
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Fb.init();
+  runApp(MaterialApp(
+    debugShowCheckedModeBanner: false,
+    title: 'طبيبك للمراكز',
+    theme: ThemeData(useMaterial3: true, colorSchemeSeed: kRed, scaffoldBackgroundColor: Colors.white, textTheme: GoogleFonts.cairoTextTheme(ThemeData.light().textTheme)),
+    builder: (c, child) => Directionality(textDirection: TextDirection.rtl, child: child!),
+    home: const LoginScreen(),
+  ));
+}
 
 const roots = <Widget>[HomeScreen(), BookingsScreen(), ManageScreen(), AccountScreen()];
 
@@ -705,6 +708,8 @@ void enterApp(BuildContext c, Member m) {
 
 void logout(BuildContext c) {
   db.me = null;
+  db.bookings.clear();
+  Fb.signOut();
   Navigator.pushAndRemoveUntil(c, MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
 }
 
@@ -724,22 +729,34 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void next() {
-    final ph = normPhone(u.text);
-    if (ph == null) return snack(context, 'أدخل رقم هاتف سوداني صحيحاً (مثال: 912345678)');
-    // ملاحظة: في الإنتاج لا يكشف الخادم هل الرقم مسجّل أم لا (منعاً لتعداد الأرقام)؛ هنا نوضّح للمستخدم لأنها نسخة تجريبية.
-    final m = db.memberByPhone(ph);
-    if (m == null) {
-      confirm(context, 'هذا الرقم غير مسجّل', 'لا يوجد حساب مركز بهذا الرقم. تأكد من الرقم أو سجّل مركزك الآن.', 'تسجيل مركز جديد', () => go(context, RegisterPhoneScreen(initial: u.text)));
-      return;
+  Future<void> next() async {
+    if (!Fb.on) {
+      return snack(context, 'Firebase غير مهيأ لهذا الإصدار. لا يمكن فتح حساب تجريبي.');
     }
-    if (!m.active) return snack(context, 'تم إيقاف هذا الحساب من مدير المركز');
-    go(context, OtpScreen(ph, (c) => enterApp(c, m)));
-  }
-
-  void demo(String ph) {
-    if (db.memberByPhone(ph) == null) db.loadDemo();
-    u.text = ph.replaceFirst('+249', '');
+    final user = Fb.user;
+    if (user == null) {
+      return snack(context, 'لا توجد جلسة دخول معتمدة. يجب تهيئة الحساب من إدارة المنصة أولاً؛ لا يوجد دخول تجريبي أو OTP.');
+    }
+    try {
+      final centerId = await Fb.verifiedCenterId();
+      await Fb.fetchCenterBookings();
+      final claims = (await user.getIdTokenResult(true)).claims ?? const <String, dynamic>{};
+      final isManager = claims['role'] == 'center_manager';
+      final member = Member(user.displayName ?? 'مستخدم المركز', user.phoneNumber ?? '', isManager ? 0 : 1,
+          perms: isManager ? {0, 1, 2, 3} : {0});
+      db.members
+        ..clear()
+        ..add(member);
+      db.me = member;
+      db.center = CenterProfile(name: 'مركزك', status: 1);
+      db.bookings.clear();
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()), (route) => false);
+      snack(context, 'تم التحقق من عضوية المركز: $centerId');
+    } catch (e) {
+      if (mounted) snack(context, 'تعذر التحقق من صلاحيات المركز: $e');
+    }
   }
 
   @override
@@ -750,20 +767,17 @@ class _LoginScreenState extends State<LoginScreen> {
             child: ListView(padding: const EdgeInsets.fromLTRB(24, 24, 24, 16), children: [
               Center(child: Text('تسجيل دخول المركز', style: t(21, w: FontWeight.w800))),
               gap(4),
-              Center(child: Text('ندخلك برقم هاتفك ورمز تحقق يصلك برسالة — بدون بريد إلكتروني أو كلمة مرور', textAlign: TextAlign.center, style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6))),
-              phoneFld('رقم الهاتف', u),
+              Center(child: Text('الدخول متاح للحسابات التي اعتمدتها إدارة طبيبك وربطتها بالمركز. لا يوجد OTP أو حساب تجريبي.', textAlign: TextAlign.center, style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6))),
+              phoneFld('رقم الهاتف (للتعريف فقط)', u, enabled: false),
               gap(18),
-              btn('إرسال رمز التحقق', next),
+              btn('التحقق من جلسة الحساب المعتمد', next),
               gap(10),
-              btn('تسجيل مركز جديد', () => go(context, RegisterPhoneScreen(initial: u.text)), outline: true, h: 46),
+              btn('تسجيل مركز جديد', () => snack(context, 'تسجيل المركز يحتاج اعتماداً وربط حساب من إدارة المنصة؛ التسجيل المحلي معطّل.'), outline: true, h: 46),
               gap(18),
               panel([
-                Text('حسابات تجريبية (بيانات نموذجية)', style: t(12.5, c: kAmber)),
+                Text('حماية الدخول', style: t(12.5, c: kGreen)),
                 gap(8),
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  GestureDetector(onTap: () => demo(kDemoManager), child: pill('مدير المركز', kChip, kInk)),
-                  GestureDetector(onTap: () => demo(kDemoReception), child: pill('موظفة الاستقبال', kChip, kInk)),
-                ]),
+                Text('لا تُمنح أي صلاحية اعتماداً على رقم الهاتف أو بيانات محفوظة داخل الجهاز. يجب أن تحمل جلسة Firebase صلاحيات مركز صادرة من الخادم.', style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6)),
               ]),
               Center(child: Text('حساب المركز يُفعَّل بعد مراجعة الترخيص من إدارة طبيبك', textAlign: TextAlign.center, style: t(11.5, w: FontWeight.w500, c: kGrey, h: 1.6))),
             ]),
@@ -893,7 +907,7 @@ class _RegPhoneState extends State<RegisterPhoneScreen> {
     final ph = normPhone(p.text);
     if (ph == null) return snack(context, 'أدخل رقم هاتف سوداني صحيحاً (مثال: 912345678)');
     if (db.memberByPhone(ph) != null) return snack(context, 'هذا الرقم مسجّل مسبقاً — سجّل الدخول بدلاً من ذلك');
-    go(context, OtpScreen(ph, (c) => Navigator.pushReplacement(c, MaterialPageRoute(builder: (_) => RegisterWizard(ph)))));
+    snack(context, 'التسجيل المحلي غير متاح. يجب اعتماد المركز وإنشاء جلسة Firebase من إدارة المنصة.');
   }
 
   Widget stepRow(IconData i, String a, String b) => Padding(
