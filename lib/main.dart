@@ -1283,8 +1283,10 @@ class _WizardState extends State<RegisterWizard> {
         return snack(context, 'تحقق من رقم المدير وأرفق صورة الترخيص الفعلية قبل الإرسال');
       }
       try {
-        final id = Fb.newCenterId();
-        await Fb.createCenter(id, {
+        final id = widget.again && db.remoteCenterId.isNotEmpty
+            ? db.remoteCenterId
+            : Fb.newCenterId();
+        final centerData = {
           'name': profile.name,
           'kind': profile.kind,
           'lic': profile.lic,
@@ -1300,18 +1302,30 @@ class _WizardState extends State<RegisterWizard> {
           'svc': profile.svc.toList(),
           'status': 0,
           'reqNo': profile.reqNo,
+          'reason': '',
           'managerUid': Fb.uid,
           'managerPhone': widget.phone,
           'licensePath': '',
-        }, widget.phone, {
-          'uid': Fb.uid,
-          'centerId': id,
-          'phone': widget.phone,
-          'name': mgr.text.trim(),
-          'role': 0,
-          'perms': [0, 1, 2, 3],
-          'active': true,
-        });
+        };
+        if (widget.again && db.remoteCenterId.isNotEmpty) {
+          await Fb.saveCenter(id, centerData);
+          await Fb.saveMember(widget.phone, {
+            'name': mgr.text.trim(),
+            'role': 0,
+            'perms': [0, 1, 2, 3],
+            'active': true,
+          });
+        } else {
+          await Fb.createCenter(id, centerData, widget.phone, {
+            'uid': Fb.uid,
+            'centerId': id,
+            'phone': widget.phone,
+            'name': mgr.text.trim(),
+            'role': 0,
+            'perms': [0, 1, 2, 3],
+            'active': true,
+          });
+        }
         final licensePath = await Fb.uploadPrivate(
           'licenses/$id/${DateTime.now().millisecondsSinceEpoch}.jpg',
           licenseBytes!,
