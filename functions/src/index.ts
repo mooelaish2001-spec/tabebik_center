@@ -8,7 +8,6 @@ initializeApp();
 const db = getFirestore();
 
 type CenterRole = "center_manager" | "center_reception";
-;
 
 function requireIdentity(request: { auth?: { uid: string; token: Record<string, unknown> } }) {
   if (!request.auth) throw new HttpsError("unauthenticated", "تسجيل الدخول مطلوب.");
