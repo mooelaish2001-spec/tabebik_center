@@ -183,6 +183,8 @@ class PasskeyAuthService {
         return 'لم نعثر على مفتاح مرور لهذا الحساب. إذا كانت هذه أول مرة، اختر إنشاء حساب.';
       case 'professional-account-claim-required':
         return 'هذا الرقم المهني مرتبط بملف سابق. يلزم مراجعة الدعم لربط الحساب بأمان.';
+      case 'center-membership-claim-required':
+        return 'هذا الهاتف مسجل كعضو في مركز. اطلب من إدارة طبيبك ربط مفتاح المرور بالعضوية بدلاً من إنشاء حساب جديد.';
       case 'professional-verification-required':
         return 'يتطلب هذا الحساب مراجعة بياناته المهنية قبل تفعيله.';
       case 'challenge-expired':
