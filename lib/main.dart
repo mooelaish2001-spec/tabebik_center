@@ -573,7 +573,7 @@ class Db extends ChangeNotifier {
       'homePrice': num(d.homePrice),
       'accepting': d.on,
       'on': d.on,
-      'initiatedBy': 'center',
+      if (st == 'invitedByCenter') 'initiatedBy': 'center',
       'doc': {
         'name': d.p.name,
         'spec': d.p.spec,
@@ -2852,7 +2852,6 @@ class _MemberState extends State<MemberForm> {
       if (Fb.on) {
         await Fb.saveMember(p, {
           if (m == null) 'uid': '',
-          if (m != null && m!.phone == Fb.phone) 'uid': Fb.uid,
           'centerId': db.remoteCenterId,
           'phone': p,
           'name': member.name,
