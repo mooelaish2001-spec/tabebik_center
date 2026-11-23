@@ -22,3 +22,11 @@ export function canTransition(current: string, targetApiStatus: string): boolean
   const target = statusToStored[targetApiStatus];
   return Boolean(target && transitions[current]?.has(target));
 }
+
+export function canSetPrice(current: string, targetApiStatus: string): boolean {
+  return current === "جديد" && targetApiStatus === "confirmed";
+}
+
+export function canCenterCompleteBooking(type: unknown): boolean {
+  return Number(type) !== 0;
+}
