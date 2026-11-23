@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// TEMPORARY SAFE BASELINE.
+// This denies all client access. Do NOT deploy as production rules while the
+// apps require Storage access. Create and test coordinated role-based rules
+// for all three apps before deployment; Storage rules are project-wide.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
