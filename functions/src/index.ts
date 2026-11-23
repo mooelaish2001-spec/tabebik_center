@@ -136,10 +136,10 @@ export const updateCenterBooking = onCall(async (request) => {
     if (!canTransition(current, status)) {
       throw new HttpsError("failed-precondition", "Invalid booking status transition.");
     }
-    if (status === "completed" && Number(snap.get("type") ?? 0) === 0) {
+    if (status === "completed" && !canCenterCompleteBooking(snap.get("type"))) {
       throw new HttpsError("failed-precondition", "Doctor appointments can only be completed by the assigned doctor after the in-person encounter.");
     }
-    if (price !== undefined && (status !== "confirmed" || current !== "جديد")) {
+    if (price !== undefined && !canSetPrice(current, status)) {
       throw new HttpsError("failed-precondition", "Price can only be set while confirming a new booking.");
     }
     if (status === "confirmed" && price === undefined && Number(snap.get("price") ?? 0) <= 0) {
