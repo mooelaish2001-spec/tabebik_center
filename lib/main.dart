@@ -363,8 +363,6 @@ class Db extends ChangeNotifier {
   final tests = <Svc>[Svc('صورة دم كاملة (CBC)', '150'), Svc('سكر صائم', '80'), Svc('سكر تراكمي HbA1c', '250'), Svc('وظائف كبد', '300'), Svc('وظائف كلى', '280'), Svc('فحص ملاريا', '120', on: false)];
   final visitSlots = <int>{0, 2}, labSlots = <int>{0, 1};
 
-  DocProfile _p(String lic) => registry.firstWhere((p) => p.lic == lic);
-
   void set(Booking b, String s, {String note = '', String who = ''}) {
     if (!can(0)) return;
     b.status = s;
