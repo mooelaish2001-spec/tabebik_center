@@ -353,6 +353,7 @@ class Db extends ChangeNotifier {
   final registry = <DocProfile>[];
 
   final bookings = <Booking>[];
+  final remoteBookings = <Map<String, dynamic>>[];
   final joinReqs = <JoinReq>[]; // طلبات انضمام واردة من أطباء
   final docs = <Doc>[];
   final beds = <Bed>[];
@@ -610,6 +611,7 @@ void enterApp(BuildContext c, Member m) {
 void logout(BuildContext c) {
   db.me = null;
   db.bookings.clear();
+  db.remoteBookings.clear();
   Fb.signOut();
   Navigator.pushAndRemoveUntil(c, MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
 }
@@ -633,7 +635,10 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final centerId = await Fb.verifiedCenterId();
       final profile = await Fb.fetchVerifiedCenterProfile();
-      await Fb.fetchCenterBookings();
+      final remoteRows = await Fb.fetchCenterBookings();
+      db.remoteBookings
+        ..clear()
+        ..addAll(remoteRows);
       final claims = (await user.getIdTokenResult(true)).claims ?? const <String, dynamic>{};
       final isManager = claims['role'] == 'center_manager';
       final member = Member(user.displayName ?? 'عضو المركز', user.phoneNumber ?? '', isManager ? 0 : 1,
@@ -995,7 +1000,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) => AnimatedBuilder(
         animation: db,
         builder: (c, _) {
-          final fresh = db.bookings.where((b) => b.status == 'جديد').toList();
+          final fresh = db.remoteBookings.where((b) => b['status'] == 'pending').toList();
           // الإجراءات السريعة تظهر حسب صلاحيات المستخدم (الاستقبال لا يرى التقارير مثلاً).
           final acts = <Widget>[
             if (db.can(2)) quick(c, Icons.person_add_alt_1_rounded, 'إضافة أخصائي', const DoctorLookupScreen()),
@@ -1007,10 +1012,10 @@ class HomeScreen extends StatelessWidget {
             nav: 0,
             action: IconButton(onPressed: () => go(c, const NotifsScreen()), icon: const Icon(Icons.notifications_rounded, color: Colors.white, size: 28)),
             body: ListView(padding: const EdgeInsets.all(12), children: [
-              Row(children: [stat(Icons.mark_email_unread_rounded, '${db.fresh}', 'طلبات جديدة'), stat(Icons.event_available_rounded, '${db.bookings.where((b) => b.status == 'مؤكد').length}', 'حجوزات مؤكدة')]),
+              Row(children: [stat(Icons.mark_email_unread_rounded, '${fresh.length}', 'طلبات جديدة'), stat(Icons.event_available_rounded, '${db.remoteBookings.where((b) => b['status'] == 'confirmed').length}', 'حجوزات مؤكدة')]),
               Row(children: [
                 stat(Icons.bed_rounded, '${db.freeBeds}/${db.beds.length}', 'أسرّة متاحة'),
-                db.can(3) ? stat(Icons.payments_rounded, '${money(db.revenue)} ج.س', 'الإيرادات') : stat(Icons.event_note_rounded, '${db.bookings.length}', 'إجمالي الحجوزات'),
+                db.can(3) ? stat(Icons.payments_rounded, '${money(db.revenue)} ج.س', 'الإيرادات') : stat(Icons.event_note_rounded, '${db.remoteBookings.length}', 'إجمالي الحجوزات'),
               ]),
               if (acts.isNotEmpty) Row(children: [...acts, for (var i = acts.length; i < 3; i++) const Expanded(child: SizedBox())]),
               Padding(
@@ -1018,7 +1023,11 @@ class HomeScreen extends StatelessWidget {
                 child: Row(children: [Expanded(child: sec('طلبات تنتظر ردّك')), GestureDetector(onTap: () => go(c, const BookingsScreen()), child: Text('عرض الكل', style: t(12.5, c: kRed)))]),
               ),
               if (fresh.isEmpty) SizedBox(height: 160, child: empty(Icons.done_all_rounded, 'لا توجد طلبات جديدة')),
-              for (final b in fresh.take(4)) Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: BookingCard(b)),
+              if (fresh.isNotEmpty) panel([
+                Text('لديك ${fresh.length} حجز جديد ينتظر المراجعة', style: t(14, w: FontWeight.w800)),
+                gap(8),
+                btn('فتح قائمة الحجوزات', () => go(c, const BookingsScreen()), h: 44),
+              ]),
             ]),
           );
         },
@@ -1061,7 +1070,15 @@ class _BookingsState extends State<BookingsScreen> {
   @override
   void initState() {
     super.initState();
-    _future = Fb.fetchCenterBookings();
+    _future = _load();
+  }
+
+  Future<List<Map<String, dynamic>>> _load() async {
+    final rows = await Fb.fetchCenterBookings();
+    db.remoteBookings
+      ..clear()
+      ..addAll(rows);
+    return rows;
   }
 
   @override
@@ -1071,7 +1088,7 @@ class _BookingsState extends State<BookingsScreen> {
   }
 
   Future<void> _reload() async {
-    final next = Fb.fetchCenterBookings();
+    final next = _load();
     setState(() => _future = next);
     await next;
   }
