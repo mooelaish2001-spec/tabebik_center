@@ -268,6 +268,7 @@ class Booking {
   final int id, type, svc; // type: 0 طبيب · 1 سرير · 2 خدمة منزلية — svc (للخدمة المنزلية فقط): 0 زيارة طبيب · 1 تمريض · 2 سحب عينات
   final String patient, phone, title, when, price, extra;
   String status, note = '', assigned = '';
+  String fid = ''; // Firestore booking document id shared with patient and doctor apps.
 }
 
 /// الملف العام للأخصائي في طبيبك (مشترك بين كل المراكز). يُعثر عليه برقم التسجيل في المجلس الطبي.
@@ -377,6 +378,158 @@ class Db extends ChangeNotifier {
   final tests = <Svc>[Svc('صورة دم كاملة (CBC)', '150'), Svc('سكر صائم', '80'), Svc('سكر تراكمي HbA1c', '250'), Svc('وظائف كبد', '300'), Svc('وظائف كلى', '280'), Svc('فحص ملاريا', '120', on: false)];
   final visitSlots = <int>{0, 2}, labSlots = <int>{0, 1};
 
+  // Firebase live state shared with the patient and doctor applications.
+  String remoteCenterId = '';
+  StreamSubscription<List<Map<String, dynamic>>>? _remoteBookings, _remoteMembers, _remoteMemberships;
+
+  void clearDemoForLive() {
+    _remoteBookings?.cancel();
+    _remoteMembers?.cancel();
+    _remoteMemberships?.cancel();
+    center = CenterProfile();
+    me = null;
+    members.clear();
+    registry.clear();
+    bookings.clear();
+    joinReqs.clear();
+    docs.clear();
+    beds.clear();
+    staff.clear();
+    remoteCenterId = '';
+    notifyListeners();
+  }
+
+  Future<bool> restoreRemoteSession(String phone) async {
+    if (!Fb.on || Fb.uid == null || phone.isEmpty) return false;
+    try {
+      final member = await Fb.centerMember(phone);
+      if (member == null || member['active'] == false) return false;
+      final cid = (member['centerId'] ?? '') as String;
+      if (cid.isEmpty) return false;
+      final row = await Fb.getCenter(cid);
+      if (row == null) return false;
+      remoteCenterId = cid;
+      center = CenterProfile(
+        name: (row['name'] ?? '') as String,
+        kind: ((row['kind'] ?? 1) as num).toInt(),
+        lic: (row['lic'] ?? '') as String,
+        state: ((row['state'] ?? 0) as num).toInt(),
+        locality: (row['city'] ?? row['locality'] ?? '') as String,
+        address: (row['address'] ?? '') as String,
+        phone: (row['phone'] ?? '') as String,
+        from: (row['from'] ?? '8:00 ص') as String,
+        to: (row['to'] ?? '10:00 م') as String,
+        status: ((row['status'] ?? 0) as num).toInt(),
+        reqNo: (row['reqNo'] ?? '') as String,
+        reason: (row['reason'] ?? '') as String,
+        svc: <int>{for (final x in ((row['svc'] ?? const []) as List)) (x as num).toInt()},
+      );
+      me = Member(
+        (member['name'] ?? '') as String,
+        phone,
+        ((member['role'] ?? 0) as num).toInt(),
+        perms: <int>{for (final x in ((member['perms'] ?? const [0, 1, 2, 3]) as List)) (x as num).toInt()},
+        active: member['active'] != false,
+      );
+      members
+        ..clear()
+        ..add(me!);
+      startRemoteSync();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void startRemoteSync() {
+    if (!Fb.on || remoteCenterId.isEmpty) return;
+    _remoteBookings?.cancel();
+    _remoteMembers?.cancel();
+    _remoteMemberships?.cancel();
+    _remoteBookings = Fb.bookingsOfCenter(remoteCenterId).listen((rows) {
+      bookings
+        ..clear()
+        ..addAll([
+          for (var i = 0; i < rows.length; i++)
+            Booking(
+              i + 1,
+              ((rows[i]['type'] ?? 0) as num).toInt(),
+              (rows[i]['name'] ?? '') as String,
+              (rows[i]['phone'] ?? '') as String,
+              (rows[i]['title'] ?? '') as String,
+              (rows[i]['when'] ?? '') as String,
+              money(((rows[i]['price'] ?? 0) as num).toInt()),
+              (rows[i]['extra'] ?? '') as String,
+              status: (rows[i]['status'] ?? 'جديد') as String,
+              svc: ((rows[i]['svc'] ?? 0) as num).toInt(),
+            )..fid = (rows[i]['id'] ?? '') as String,
+        ]);
+      notifyListeners();
+    });
+    _remoteMembers = Fb.membersOfCenter(remoteCenterId).listen((rows) {
+      final currentPhone = me?.phone;
+      members
+        ..clear()
+        ..addAll([
+          for (final r in rows)
+            Member(
+              (r['name'] ?? '') as String,
+              (r['phone'] ?? '') as String,
+              ((r['role'] ?? 1) as num).toInt(),
+              perms: <int>{for (final x in ((r['perms'] ?? const [0, 1]) as List)) (x as num).toInt()},
+              active: r['active'] != false,
+            ),
+        ]);
+      me = members.where((m) => m.phone == currentPhone).firstOrNull;
+      notifyListeners();
+    });
+    _remoteMemberships = Fb.membershipsOfCenter(remoteCenterId).listen((rows) async {
+      final nextDocs = <Doc>[];
+      final nextReqs = <JoinReq>[];
+      for (final row in rows) {
+        final status = (row['status'] ?? '') as String;
+        if (status == 'removed' || status == 'offApp') continue;
+        final lic = (row['lic'] ?? '') as String;
+        if (lic.isEmpty) continue;
+        Map<String, dynamic> pData = row['doc'] is Map
+            ? Map<String, dynamic>.from(row['doc'] as Map)
+            : (await Fb.getDoctor(lic) ?? <String, dynamic>{});
+        if (pData.isEmpty) continue;
+        final p = DocProfile(
+          lic,
+          (pData['name'] ?? '') as String,
+          (pData['spec'] ?? '') as String,
+          (pData['quals'] ?? '') as String,
+          '${pData['exp'] ?? 0}',
+          gender: pData['female'] == true ? 1 : 0,
+          phone: '',
+          verified: pData['verified'] == true,
+          claimed: pData['claimed'] == true,
+        );
+        if (!registry.any((x) => x.lic == lic)) registry.add(p);
+        final days = <int>{for (final x in ((row['days'] ?? const []) as List)) (x as num).toInt()};
+        final fromMin = ((row['from'] ?? 480) as num).toInt();
+        final toMin = ((row['to'] ?? 1080) as num).toInt();
+        final price = money(((row['fee'] ?? 0) as num).toInt());
+        if (status == 'requestedByDoctor') {
+          nextReqs.add(JoinReq(p, price: price, wd: days, from: fmtTime(fromMin), to: fmtTime(toMin)));
+        } else {
+          nextDocs.add(Doc(p, price: price, wd: days, from: fmtTime(fromMin), to: fmtTime(toMin), invited: status == 'invitedByCenter'));
+        }
+      }
+      docs
+        ..clear()
+        ..addAll(nextDocs);
+      joinReqs
+        ..clear()
+        ..addAll(nextReqs);
+      notifyListeners();
+    });
+  }
+
+  Future<bool> loginRemote(String phone) => restoreRemoteSession(phone);
+
   DocProfile _p(String lic) => registry.firstWhere((p) => p.lic == lic);
 
   /// يحمّل مركزاً تجريبياً كاملاً (حجوزات وأخصائيون وأسرّة ومستخدمون).
@@ -426,6 +579,9 @@ class Db extends ChangeNotifier {
     b.status = s;
     b.note = note;
     b.assigned = who;
+    if (Fb.on && b.fid.isNotEmpty) {
+      Fb.updateBooking(b.fid, {'status': s, 'note': note, 'assigned': who}).catchError((_) {});
+    }
     notifyListeners();
   }
 
