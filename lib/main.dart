@@ -36,6 +36,11 @@ void snack(BuildContext c, String m) => ScaffoldMessenger.of(c).showSnackBar(Sna
 /// يحوّل الأرقام العربية (٠-٩) والفارسية (۰-۹) إلى لاتينية حتى تعمل كل الحقول مع لوحة المفاتيح العربية.
 String latin(String s) => String.fromCharCodes(s.runes.map((r) => r >= 0x660 && r <= 0x669 ? r - 0x660 + 48 : r >= 0x6F0 && r <= 0x6F9 ? r - 0x6F0 + 48 : r));
 int num(String s) => int.tryParse(latin(s).replaceAll(',', '').trim()) ?? 0;
+int _asInt(dynamic value, int fallback) {
+  if (value is int) return value;
+  if (value is double) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? fallback;
+}
 
 /// يقبل الأرقام اللاتينية والعربية فقط.
 final digitsFmt = FilteringTextInputFormatter.allow(RegExp('[0-9\u0660-\u0669\u06F0-\u06F9]'));
@@ -649,13 +654,13 @@ class _LoginScreenState extends State<LoginScreen> {
       db.me = member;
       final rawServices = profile['svc'];
       final serviceSet = rawServices is List
-          ? rawServices.map((v) => (v as num).toInt()).toSet()
+          ? rawServices.map((v) => _asInt(v, -1)).where((v) => v >= 0).toSet()
           : <int>{0, 1, 2};
       db.center = CenterProfile(
         name: (profile['name'] ?? 'مركزك').toString(),
-        kind: (profile['kind'] as num?)?.toInt() ?? 1,
+        kind: _asInt(profile['kind'], 1),
         lic: (profile['lic'] ?? '').toString(),
-        state: (profile['state'] as num?)?.toInt() ?? 0,
+        state: _asInt(profile['state'], 0),
         locality: (profile['locality'] ?? '').toString(),
         address: (profile['address'] ?? '').toString(),
         phone: (profile['phone'] ?? '').toString(),
@@ -1001,7 +1006,7 @@ class HomeScreen extends StatelessWidget {
         animation: db,
         builder: (c, _) {
           final fresh = db.remoteBookings.where((b) => b['status'] == 'pending').toList();
-          final remoteRevenue = db.remoteBookings.fold<int>(0, (sum, row) => sum + ((row['price'] as num?)?.toInt() ?? 0));
+          final remoteRevenue = db.remoteBookings.fold<int>(0, (sum, row) => sum + _asInt(row['price'], 0));
           // الإجراءات السريعة تظهر حسب صلاحيات المستخدم (الاستقبال لا يرى التقارير مثلاً).
           final acts = <Widget>[
             if (db.can(2)) quick(c, Icons.person_add_alt_1_rounded, 'إضافة أخصائي', const DoctorLookupScreen()),
