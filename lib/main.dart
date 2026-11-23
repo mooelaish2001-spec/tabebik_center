@@ -407,6 +407,11 @@ class Db extends ChangeNotifier {
     try {
       final member = await Fb.centerMember(phone);
       if (member == null || member['active'] == false) return false;
+      final boundUid = (member['uid'] ?? '') as String;
+      if (boundUid.isNotEmpty && boundUid != Fb.uid) return false;
+      if (boundUid.isEmpty && Fb.uid != null) {
+        await Fb.saveMember(phone, {'uid': Fb.uid});
+      }
       final cid = (member['centerId'] ?? '') as String;
       if (cid.isEmpty) return false;
       final row = await Fb.getCenter(cid);
@@ -2833,7 +2838,8 @@ class _MemberState extends State<MemberForm> {
     try {
       if (Fb.on) {
         await Fb.saveMember(p, {
-          'uid': m?.phone == Fb.phone ? Fb.uid : '',
+          if (m == null) 'uid': '',
+          if (m != null && m!.phone == Fb.phone) 'uid': Fb.uid,
           'centerId': db.remoteCenterId,
           'phone': p,
           'name': member.name,
