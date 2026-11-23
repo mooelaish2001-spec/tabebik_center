@@ -176,6 +176,16 @@ class Fb {
     return d.exists ? _row(d) : null;
   }
 
+  /// Loads only the approved public center profile for the verified claim scope.
+  static Future<Map<String, dynamic>> fetchVerifiedCenterProfile() async {
+    final centerId = await verifiedCenterId();
+    final row = await getCenter(centerId);
+    if (row == null || row['status'] != 1) {
+      throw StateError('المركز غير موجود أو لم يعد معتمداً.');
+    }
+    return row;
+  }
+
   /// مراقبة وثيقة المركز (لمعرفة اعتماده من الإدارة وهو على شاشة الانتظار).
   static Stream<Map<String, dynamic>?> watchCenter(String id) => _db.collection('centers').doc(id).snapshots().map((d) => d.exists ? _row(d) : null).handleError((_) {});
 
