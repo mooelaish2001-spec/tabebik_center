@@ -9,7 +9,7 @@ import 'tabibak_firebase.dart';
 // يستخدم نفس تصميم تطبيق المستخدمين. البيانات في الذاكرة (Db) وتتحدّث لحظياً بين الشاشات.
 //
 // الدخول: جلسة Firebase موجودة مسبقاً وصلاحيات مركز صادرة من الخادم؛ لا يوجد OTP أو دخول تجريبي.
-//   • مدير المركز يسجّل المركز ويتحقق من هاتفه، ثم يضيف حساب الاستقبال (دخوله أيضاً برقمه + OTP).
+//   • الجلسة المجهولة لا تمنح صلاحية؛ إدارة المنصة تربط UID بعد اعتماد المركز والموظف.
 //   • إضافة أخصائي: يُبحث برقم تسجيله في المجلس الطبي؛ إن كان مسجّلاً في طبيبك يظهر ملفه مباشرة
 //     ويُضاف بشروط المركز، وإلا يُسجَّل كأخصائي جديد (قيد التحقق).
 //
@@ -556,6 +556,9 @@ const kWho = ['طبيب', 'ممرض', 'فني مختبر'];
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Fb.init();
+  if (Fb.on) {
+    try { await Fb.ensureAnonymousSession(); } catch (_) {}
+  }
   runApp(MaterialApp(
     debugShowCheckedModeBanner: false,
     title: 'طبيبك للمراكز',
@@ -635,7 +638,7 @@ class RPage extends StatelessWidget {
       );
 }
 
-// ═══════════════ 1. Auth — Login · OTP · Register · Pending ═══════════════
+// ═══════════════ 1. Auth — Firebase session · Admin provisioning · Pending ═══════════════
 Widget authHeader(String sub, {IconData icon = Icons.local_hospital_rounded, String title = 'طبيبك', double size = 34, double h = 250}) => Container(
       height: h, width: double.infinity,
       decoration: const BoxDecoration(gradient: kGrad, borderRadius: BorderRadius.vertical(bottom: Radius.circular(80))),
@@ -709,7 +712,7 @@ class _LoginScreenState extends State<LoginScreen> {
         MaterialPageRoute(builder: (_) => const HomeScreen()), (route) => false);
       snack(context, 'تم التحقق من عضوية المركز: $centerId');
     } catch (e) {
-      if (mounted) snack(context, 'تعذر التحقق من صلاحيات المركز: $e');
+      if (mounted) snack(context, 'الحساب غير معتمد بعد. معرّف الجلسة: ${user.uid} — أرسله لإدارة المنصة.');
     }
   }
 
@@ -722,7 +725,9 @@ class _LoginScreenState extends State<LoginScreen> {
               Center(child: Text('تسجيل دخول المركز', style: t(21, w: FontWeight.w800))),
               gap(4),
               Center(child: Text('الدخول متاح للحسابات التي اعتمدتها إدارة طبيبك وربطتها بالمركز. لا يوجد OTP أو حساب تجريبي.', textAlign: TextAlign.center, style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6))),
-              phoneFld('رقم الهاتف (للتعريف فقط)', u, enabled: false),
+              lockedRow('معرّف جلسة Firebase', Fb.user?.uid ?? 'غير متاح — تحقق من إعداد Firebase'),
+              gap(8),
+              Text('انسخ معرّف الجلسة وأرسله لإدارة طبيبك بعد اعتماد المركز. لا تمنح الجلسة المجهولة أي صلاحيات حتى يربطها مسؤول المنصة بمركزك.', style: t(11.5, w: FontWeight.w500, c: kGrey, h: 1.6)),
               gap(18),
               btn('التحقق من جلسة الحساب المعتمد', next),
               gap(10),
@@ -1092,11 +1097,18 @@ class BookingsScreen extends StatefulWidget {
 
 class _BookingsState extends State<BookingsScreen> {
   late Future<List<Map<String, dynamic>>> _future;
+  final Map<String, TextEditingController> _prices = {};
 
   @override
   void initState() {
     super.initState();
     _future = Fb.fetchCenterBookings();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _prices.values) { c.dispose(); }
+    super.dispose();
   }
 
   Future<void> _reload() async {
@@ -1122,18 +1134,25 @@ class _BookingsState extends State<BookingsScreen> {
       case 'doctor': return 'حجز طبيب';
       case 'bed': return 'حجز سرير';
       case 'home': return 'خدمة منزلية';
-      case 'lab': return 'خدمة مختبر';
-      default: return value.isEmpty ? 'حجز خدمة' : value;
+      default: return 'حجز خدمة';
     }
   }
 
   Future<void> _change(Map<String, dynamic> row, String status) async {
     final id = (row['bookingId'] ?? '').toString();
     if (id.isEmpty) return snack(context, 'رقم الحجز غير موجود');
+    int? price;
+    if (status == 'confirmed') {
+      final raw = _prices[id]?.text ?? (row['price'] ?? '').toString();
+      price = int.tryParse(latin(raw).replaceAll(',', '').trim());
+      if (price == null || price <= 0 || price > 100000000) {
+        return snack(context, 'أدخل سعر الكشف أو الخدمة الذي حدده المركز أولاً');
+      }
+    }
     try {
-      await Fb.updateCenterBookingStatus(id, status);
+      await Fb.updateCenterBookingStatus(id, status, price: price);
       await _reload();
-      if (mounted) snack(context, 'تم تحديث حالة الحجز على الخادم');
+      if (mounted) snack(context, 'تم تحديث الحجز والسعر المعتمد على الخادم');
     } catch (e) {
       if (mounted) snack(context, 'لم يتم تحديث الحجز: $e');
     }
@@ -1141,11 +1160,15 @@ class _BookingsState extends State<BookingsScreen> {
 
   Widget _bookingCard(Map<String, dynamic> row) {
     final status = (row['status'] ?? '').toString();
+    final id = (row['bookingId'] ?? '').toString();
     final uid = (row['patientUid'] ?? '').toString();
     final patientRef = uid.length > 6 ? '…${uid.substring(uid.length - 6)}' : (uid.isEmpty ? 'غير متاح' : uid);
-    final doctor = (row['doctorName'] ?? '').toString();
-    final when = [row['dateIso'], row['time']].where((v) => v != null && v.toString().isNotEmpty).join(' · ');
+    final patient = (row['patientName'] ?? row['name'] ?? '').toString();
+    final title = (row['title'] ?? '').toString();
+    final when = (row['when'] ?? row['dateIso'] ?? '').toString();
+    final phone = (row['phone'] ?? '').toString();
     final price = (row['price'] ?? '').toString();
+    final controller = _prices.putIfAbsent(id, () => TextEditingController(text: price == '0' ? '' : price));
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -1154,19 +1177,37 @@ class _BookingsState extends State<BookingsScreen> {
         Row(children: [
           tile(Icons.event_note_rounded),
           const SizedBox(width: 10),
-          Expanded(child: two(_serviceLabel(row), 'مرجع المريض: $patientRef')),
+          Expanded(child: two(_serviceLabel(row), patient.isEmpty ? 'مرجع المريض: $patientRef' : patient)),
           badge(_statusLabel(status)),
         ]),
-        if (doctor.isNotEmpty) ...[gap(8), kv('الأخصائي', doctor)],
+        if (title.isNotEmpty) ...[gap(8), kv('التفاصيل', title)],
         if (when.isNotEmpty) kv('الموعد', when),
-        if (price.isNotEmpty) kv('السعر', '$price ج.س', bold: true),
-        gap(8),
-        if (status == 'pending') Row(children: [
-          Expanded(child: btn('تأكيد الحجز', () => _change(row, 'confirmed'), h: 42)),
-          const SizedBox(width: 8),
-          Expanded(child: btn('رفض', () => _change(row, 'rejected'), outline: true, h: 42)),
-        ]) else if (status == 'confirmed')
-          btn('تأكيد إكمال الخدمة', () => _change(row, 'completed'), h: 42),
+        if (phone.isNotEmpty) kv('هاتف التواصل', phone),
+        if (status == 'pending') ...[
+          const SizedBox(height: 10),
+          Text('السعر الذي يحدده المركز (ج.س)', style: t(12.5, w: FontWeight.w700)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: controller,
+            keyboardType: TextInputType.number,
+            inputFormatters: [digitsFmt, LengthLimitingTextInputFormatter(12)],
+            decoration: InputDecoration(
+              hintText: 'أدخل السعر قبل تأكيد الحجز',
+              filled: true, fillColor: Colors.white,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: kLine)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
+          ),
+          gap(8),
+          Row(children: [
+            Expanded(child: btn('تأكيد بالسعر المحدد', () => _change(row, 'confirmed'), h: 42)),
+            const SizedBox(width: 8),
+            Expanded(child: btn('رفض', () => _change(row, 'rejected'), outline: true, h: 42)),
+          ]),
+        ] else ...[
+          if (price.isNotEmpty) kv('السعر المعتمد', '$price ج.س', bold: true),
+          if (status == 'confirmed') btn('تأكيد إكمال الخدمة', () => _change(row, 'completed'), h: 42),
+        ],
       ]),
     );
   }
