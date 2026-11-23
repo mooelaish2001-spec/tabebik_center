@@ -633,9 +633,8 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!Fb.on) {
       return snack(context, 'Firebase غير مهيأ لهذا الإصدار. لا يمكن فتح حساب تجريبي.');
     }
-    User? user = Fb.user;
     try {
-      user ??= await Fb.ensureAnonymousSession();
+      final user = Fb.user ?? await Fb.ensureAnonymousSession();
       final centerId = await Fb.verifiedCenterId();
       final profile = await Fb.fetchVerifiedCenterProfile();
       final remoteRows = await Fb.fetchCenterBookings();
