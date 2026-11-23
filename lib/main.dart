@@ -1122,11 +1122,12 @@ class _OtpState extends State<OtpScreen> {
           Center(child: Text('أرسلنا رمزاً من 6 أرقام إلى', style: t(12.5, w: FontWeight.w500, c: kGrey))),
           Center(child: Text(fmtPhone(widget.phone), textDirection: TextDirection.ltr, style: t(15))),
           gap(14),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: kAmberBg, borderRadius: BorderRadius.circular(14)),
-            child: Text('وضع تجريبي: لا تُرسَل رسالة SMS فعلية في هذا النموذج.\nرمز التحقق: $demoCode', style: t(12.5, c: kAmber, h: 1.7)),
-          ),
+          if (!Fb.on)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: kAmberBg, borderRadius: BorderRadius.circular(14)),
+              child: Text('وضع تجريبي: لا تُرسَل رسالة SMS فعلية في هذا النموذج.\nرمز التحقق: $demoCode', style: t(12.5, c: kAmber, h: 1.7)),
+            ),
           gap(6),
           fld('رمز التحقق', ctl,
               kb: TextInputType.number, ltr: true, hint: '------', align: TextAlign.center,
