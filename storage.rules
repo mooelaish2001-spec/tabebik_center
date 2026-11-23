@@ -6,7 +6,10 @@ service firebase.storage {
     function isCenterStaff() {
       return signedIn()
         && request.auth.token.role in ['center_manager', 'center_reception']
-        && request.auth.token.centerId is string;
+        && request.auth.token.centerId is string
+        && firestore.get(/databases/(default)/documents/centerMembers/$(request.auth.uid)).data.active == true
+        && firestore.get(/databases/(default)/documents/centerMembers/$(request.auth.uid)).data.centerId == request.auth.token.centerId
+        && firestore.get(/databases/(default)/documents/centerMembers/$(request.auth.uid)).data.role == request.auth.token.role;
     }
     function validReceipt() {
       return request.resource != null
