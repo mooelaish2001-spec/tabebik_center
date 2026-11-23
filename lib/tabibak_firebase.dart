@@ -72,6 +72,19 @@ class Fb {
 
   static Stream<List<Map<String, dynamic>>> _watch(Query<Map<String, dynamic>> q) => q.snapshots().map((s) => [for (final d in s.docs) _row(d)]).handleError((_) {});
 
+  /// Creates a persistent anonymous Firebase identity when no session exists.
+  /// A platform administrator must still provision center claims after verifying
+  /// the center and the operator out-of-band; anonymous identity grants no role.
+  static Future<User> ensureAnonymousSession() async {
+    if (!on) throw StateError('Firebase غير مهيأ.');
+    final existing = _auth.currentUser;
+    if (existing != null) return existing;
+    final credential = await _auth.signInAnonymously();
+    final user = credential.user;
+    if (user == null) throw StateError('تعذر إنشاء جلسة Firebase.');
+    return user;
+  }
+
   static Future<void> signOut() async {
     try {
       await _auth.signOut();
