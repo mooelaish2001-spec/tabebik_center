@@ -531,6 +531,43 @@ class Db extends ChangeNotifier {
 
   Future<bool> loginRemote(String phone) => restoreRemoteSession(phone);
 
+  Future<void> persistMembership(Doc d, {String? status}) async {
+    if (!Fb.on || remoteCenterId.isEmpty) return;
+    final st = status ?? (d.invited ? 'invitedByCenter' : 'active');
+    await Fb.setMembership('${d.lic}_$remoteCenterId', {
+      'lic': d.lic,
+      'centerId': remoteCenterId,
+      'centerName': center.name,
+      'status': st,
+      'fee': num(d.price),
+      'days': d.wd.toList()..sort(),
+      'from': parseTime(d.from) ?? 480,
+      'to': parseTime(d.to) ?? 1080,
+      'kind': center.kind,
+      'city': center.locality,
+      'address': center.address,
+      'centerPhone': center.phone,
+      'home': d.home,
+      'homePrice': num(d.homePrice),
+      'accepting': d.on,
+      'initiatedBy': 'center',
+      'doc': {
+        'name': d.p.name,
+        'spec': d.p.spec,
+        'quals': d.p.quals,
+        'exp': num(d.p.exp),
+        'female': d.p.gender == 1,
+        'verified': d.p.verified,
+        'claimed': d.p.claimed,
+      },
+    });
+  }
+
+  Future<void> removeMembership(Doc d) async {
+    if (!Fb.on || remoteCenterId.isEmpty) return;
+    await Fb.setMembership('${d.lic}_$remoteCenterId', {'status': 'removed'});
+  }
+
   DocProfile _p(String lic) => registry.firstWhere((p) => p.lic == lic);
 
   /// يحمّل مركزاً تجريبياً كاملاً (حجوزات وأخصائيون وأسرّة ومستخدمون).
@@ -863,7 +900,12 @@ void enterApp(BuildContext c, Member m) {
 }
 
 void logout(BuildContext c) {
-  db.me = null;
+  if (Fb.on) {
+    Fb.signOut();
+    db.clearDemoForLive();
+  } else {
+    db.me = null;
+  }
   Navigator.pushAndRemoveUntil(c, MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false);
 }
 
