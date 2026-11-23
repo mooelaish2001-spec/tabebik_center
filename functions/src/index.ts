@@ -7,18 +7,6 @@ initializeApp();
 const db = getFirestore();
 
 type CenterRole = "center_manager" | "center_reception";
-const statusToStored: Record<string, string> = {
-  pending: "جديد", confirmed: "مؤكد", rejected: "مرفوض",
-  cancelled: "ملغي", completed: "مكتمل"
-};
-const storedToStatus: Record<string, string> = Object.fromEntries(
-  Object.entries(statusToStored).map(([api, stored]) => [stored, api])
-);
-const transitions: Record<string, Set<string>> = {
-  "جديد": new Set(["مؤكد", "مرفوض", "ملغي"]),
-  "مؤكد": new Set(["ملغي", "مكتمل"]),
-  "مرفوض": new Set(), "ملغي": new Set(), "مكتمل": new Set()
-};
 const operationalKeys = [
   "patientUid", "centerId", "doctorLic", "phone", "name", "title",
   "type", "svc", "dateIso", "when", "timeMin", "place", "status",
@@ -145,7 +133,7 @@ export const updateCenterBooking = onCall(async (request) => {
     }
     const current = String(snap.get("status") ?? "");
     const target = statusToStored[status];
-    if (!transitions[current]?.has(target)) {
+    if (!canTransition(current, status)) {
       throw new HttpsError("failed-precondition", "Invalid booking status transition.");
     }
     if (status === "confirmed" && price === undefined && Number(snap.get("price") ?? 0) <= 0) {
