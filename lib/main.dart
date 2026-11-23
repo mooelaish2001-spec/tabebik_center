@@ -2057,7 +2057,7 @@ class _DoctorFormState extends State<DoctorForm> {
     super.dispose();
   }
 
-  void save() {
+  Future<void> save() async {
     String? phone;
     if (editId) {
       if (n.text.trim().isEmpty) return snack(context, 'أدخل اسم الأخصائي');
@@ -2066,38 +2066,71 @@ class _DoctorFormState extends State<DoctorForm> {
       if (phone == null) return snack(context, 'أدخل رقم هاتف الأخصائي صحيحاً');
       if (spec.isEmpty) return snack(context, 'اختر التخصص');
       final owner = db.phoneOwner(phone, except: d?.p);
-      if (owner != null) return snack(context, 'هذا الرقم مرتبط بحساب آخر ($owner)');
+      if (owner != null) return snack(context, 'هذا الرقم مرتبط بحساب آخر (' + owner + ')');
     }
     final e = tm.check();
     if (e != null) return snack(context, e);
 
-    final nm = n.text.trim().startsWith('د.') ? n.text.trim() : 'د. ${n.text.trim()}';
-    final ex = exp.text.trim().isEmpty ? '0' : '${num(exp.text)}';
-    if (d == null) {
-      if (db.lookup(licC.text) != null) return snack(context, 'هذا الرقم مسجّل مسبقاً في طبيبك');
-      final p = DocProfile(licC.text.trim(), nm, kSpecs[spec.first], q.text.trim(), ex, gender: gender.first, phone: phone!, verified: false, mine: true);
-      db.registry.add(p);
-      final nd = Doc(p, invited: true); // دعوة بانتظار دخول الطبيب وموافقته
-      tm.fill(nd);
-      db.docs.add(nd);
-    } else {
-      final x = d!;
-      if (editId) {
-        x.p
-          ..name = nm
-          ..spec = kSpecs[spec.first]
-          ..quals = q.text.trim()
-          ..exp = ex
-          ..gender = gender.first
-          ..phone = phone!;
+    final council = normLic(licC.text);
+    if (d == null && council == null) return snack(context, 'أدخل رقم المجلس الطبي الصحيح');
+    if (d == null && Fb.on) {
+      try {
+        if (await Fb.getDoctor(council!) != null) return snack(context, 'هذا الرقم مسجّل مسبقاً في طبيبك');
+      } catch (_) {
+        return snack(context, 'تعذّر التحقق من رقم المجلس. حاول مجدداً.');
       }
-      tm.fill(x);
+    } else if (d == null && db.lookup(council!) != null) {
+      return snack(context, 'هذا الرقم مسجّل مسبقاً في طبيبك');
+    }
+
+    final nm = n.text.trim().startsWith('د.') ? n.text.trim() : 'د. ' + n.text.trim();
+    final ex = exp.text.trim().isEmpty ? '0' : num(exp.text).toString();
+    try {
+      if (d == null) {
+        final p = DocProfile(council!, nm, kSpecs[spec.first], q.text.trim(), ex, gender: gender.first, phone: phone!, verified: false, mine: true, claimed: false);
+        final nd = Doc(p, invited: true);
+        tm.fill(nd);
+        if (Fb.on) {
+          await Fb.saveDoctor(p.lic, {
+            'name': p.name,
+            'spec': p.spec,
+            'quals': p.quals,
+            'exp': num(p.exp),
+            'female': p.gender == 1,
+            'verified': false,
+            'claimed': false,
+            'uid': '',
+            'grade': 1,
+            'createdBy': db.remoteCenterId,
+          }, key: {'phone': phone, 'createdBy': db.remoteCenterId});
+        }
+        db.registry.add(p);
+        db.docs.add(nd);
+        await db.persistMembership(nd, status: 'invitedByCenter');
+      } else {
+        final x = d!;
+        if (editId) {
+          x.p
+            ..name = nm
+            ..spec = kSpecs[spec.first]
+            ..quals = q.text.trim()
+            ..exp = ex
+            ..gender = gender.first
+            ..phone = phone!;
+        }
+        tm.fill(x);
+        await db.persistMembership(x, status: x.invited ? 'invitedByCenter' : 'active');
+      }
+    } catch (_) {
+      if (mounted) snack(context, 'تعذّر حفظ بيانات الأخصائي أو دعوته. تحقق من اتصال Firebase وصلاحيات المركز.');
+      return;
     }
     db.ping();
-    snack(context, d == null ? 'سُجّل الأخصائي وأُرسلت له دعوة؛ يُربط ملفه عند دخوله برقم المجلس وهاتفه' : 'تم حفظ بيانات الأخصائي');
-    Navigator.pop(context);
+    if (mounted) {
+      snack(context, d == null ? 'سُجّل الأخصائي وأُرسلت له دعوة؛ يُربط ملفه عند دخوله برقم المجلس وهاتفه' : 'تم حفظ بيانات الأخصائي');
+      Navigator.pop(context);
+    }
   }
-
   @override
   Widget build(BuildContext context) => RPage(
         d == null ? 'تسجيل أخصائي جديد' : 'بيانات الأخصائي',
