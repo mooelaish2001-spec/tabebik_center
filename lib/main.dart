@@ -1001,6 +1001,7 @@ class HomeScreen extends StatelessWidget {
         animation: db,
         builder: (c, _) {
           final fresh = db.remoteBookings.where((b) => b['status'] == 'pending').toList();
+          final remoteRevenue = db.remoteBookings.fold<int>(0, (sum, row) => sum + ((row['price'] as num?)?.toInt() ?? 0));
           // الإجراءات السريعة تظهر حسب صلاحيات المستخدم (الاستقبال لا يرى التقارير مثلاً).
           final acts = <Widget>[
             if (db.can(2)) quick(c, Icons.person_add_alt_1_rounded, 'إضافة أخصائي', const DoctorLookupScreen()),
@@ -1015,7 +1016,7 @@ class HomeScreen extends StatelessWidget {
               Row(children: [stat(Icons.mark_email_unread_rounded, '${fresh.length}', 'طلبات جديدة'), stat(Icons.event_available_rounded, '${db.remoteBookings.where((b) => b['status'] == 'confirmed').length}', 'حجوزات مؤكدة')]),
               Row(children: [
                 stat(Icons.bed_rounded, '${db.freeBeds}/${db.beds.length}', 'أسرّة متاحة'),
-                db.can(3) ? stat(Icons.payments_rounded, '${money(db.revenue)} ج.س', 'الإيرادات') : stat(Icons.event_note_rounded, '${db.remoteBookings.length}', 'إجمالي الحجوزات'),
+                db.can(3) ? stat(Icons.payments_rounded, '${money(remoteRevenue)} ج.س', 'الإيرادات') : stat(Icons.event_note_rounded, '${db.remoteBookings.length}', 'إجمالي الحجوزات'),
               ]),
               if (acts.isNotEmpty) Row(children: [...acts, for (var i = acts.length; i < 3; i++) const Expanded(child: SizedBox())]),
               Padding(
@@ -1358,13 +1359,22 @@ class ManageScreen extends StatelessWidget {
         builder: (c, _) => RPage(
           'الإدارة',
           nav: 2,
-          body: GridView.count(crossAxisCount: 2, padding: const EdgeInsets.all(16), mainAxisSpacing: 14, crossAxisSpacing: 14, childAspectRatio: 1.05, children: [
+          body: Column(children: [
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: kAmberBg, borderRadius: BorderRadius.circular(14)),
+              child: Text('تنبيه: إدارة الأخصائيين والأسرّة والخدمات والمستخدمين ما زالت واجهات محلية ولم تُربط بالخادم بعد. لا تعتمد على التغييرات هنا كبيانات محفوظة.', style: t(11.5, w: FontWeight.w600, c: kAmber, h: 1.6)),
+            ),
+            Expanded(child: GridView.count(crossAxisCount: 2, padding: const EdgeInsets.all(16), mainAxisSpacing: 14, crossAxisSpacing: 14, childAspectRatio: 1.05, children: [
             if (db.can(2)) item(c, Icons.medical_services_rounded, 'الأخصائيون', '${db.docs.length} أخصائي${db.joinReqs.isEmpty ? '' : ' · ${db.joinReqs.length} طلب جديد'}', const DoctorsScreen()),
             if (db.can(1)) item(c, Icons.bed_rounded, 'الأسرّة', '${db.freeBeds} متاح من ${db.beds.length}', const BedsScreen()),
             if (db.can(2)) item(c, Icons.home_rounded, 'الخدمات المنزلية', '${db.svcs.where((s) => s.on).length} خدمة مفعّلة', const HomeSvcScreen()),
             if (db.can(3)) item(c, Icons.bar_chart_rounded, 'التقارير', 'الإيرادات والحجوزات', const ReportsScreen()),
             item(c, Icons.notifications_rounded, 'الإشعارات', '${db.fresh} جديد', const NotifsScreen()),
             if (db.isManager) item(c, Icons.group_rounded, 'المستخدمون', '${db.members.length} مستخدم', const UsersScreen()),
+          ])),
           ]),
         ),
       );
