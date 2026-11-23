@@ -2697,7 +2697,7 @@ class _CenterInfoState extends State<CenterInfoScreen> {
     super.dispose();
   }
 
-  void save() {
+  Future<void> save() async {
     if (n.text.trim().length < 3) return snack(context, 'أدخل اسم المركز');
     if (svc.isEmpty) return snack(context, 'اختر خدمة واحدة على الأقل');
     c
@@ -2710,11 +2710,29 @@ class _CenterInfoState extends State<CenterInfoScreen> {
       ..kind = kind.first
       ..state = state
       ..svc = {...svc};
+    if (Fb.on && db.remoteCenterId.isNotEmpty) {
+      try {
+        await Fb.saveCenter(db.remoteCenterId, {
+          'name': c.name,
+          'phone': c.phone,
+          'city': c.locality,
+          'address': c.address,
+          'from': c.from,
+          'to': c.to,
+          'kind': c.kind,
+          'state': c.state,
+          'svc': c.svc.toList(),
+        });
+      } catch (_) {
+        return snack(context, 'تعذّر حفظ بيانات المركز على الخادم. حاول مجدداً.');
+      }
+    }
     db.ping();
-    snack(context, 'تم حفظ بيانات المركز');
-    Navigator.pop(context);
+    if (mounted) {
+      snack(context, 'تم حفظ بيانات المركز');
+      Navigator.pop(context);
+    }
   }
-
   @override
   Widget build(BuildContext context) => RPage(
         'بيانات المركز',
@@ -2798,7 +2816,7 @@ class _MemberState extends State<MemberForm> {
     super.dispose();
   }
 
-  void save() {
+  Future<void> save() async {
     if (n.text.trim().length < 3) return snack(context, 'أدخل اسم المستخدم');
     final p = m == null ? normPhone(ph.text) : m!.phone;
     if (p == null) return snack(context, 'أدخل رقم هاتف سوداني صحيحاً');
@@ -2806,22 +2824,36 @@ class _MemberState extends State<MemberForm> {
     final r = role.first;
     if ((isMe || lastMgr) && (r != m!.role || !active)) return snack(context, isMe ? 'لا يمكنك تغيير دورك أو إيقاف حسابك' : 'لا يمكن إيقاف آخر مدير أو تغيير دوره');
     final ps = r == 0 ? {0, 1, 2, 3} : {...perms};
+    final member = m ?? Member(n.text.trim(), p, r, perms: ps);
+    member
+      ..name = n.text.trim()
+      ..role = r
+      ..perms = ps
+      ..active = active;
+    try {
+      if (Fb.on) {
+        await Fb.saveMember(p, {
+          'uid': m?.phone == Fb.phone ? Fb.uid : '',
+          'centerId': db.remoteCenterId,
+          'phone': p,
+          'name': member.name,
+          'role': member.role,
+          'perms': member.perms.toList(),
+          'active': member.active,
+        });
+      }
+    } catch (_) {
+      return snack(context, 'تعذّر حفظ المستخدم على الخادم. تحقق من الصلاحيات.');
+    }
     if (m == null) {
-      db.members.add(Member(n.text.trim(), p, r, perms: ps));
-      snack(context, 'تمت إضافة ${n.text.trim()} — يدخل برقم هاتفه ورمز تحقق (إرسال الدعوة بـ SMS يحتاج ربط خادم)');
+      db.members.add(member);
+      snack(context, 'تمت إضافة ${member.name} — يدخل برقم هاتفه ورمز تحقق');
     } else {
-      final x = m!;
-      x
-        ..name = n.text.trim()
-        ..role = r
-        ..perms = ps
-        ..active = active;
       snack(context, 'تم حفظ التعديلات');
     }
     db.ping();
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
   }
-
   @override
   Widget build(BuildContext context) => RPage(
         m == null ? 'إضافة مستخدم' : 'تعديل مستخدم',
