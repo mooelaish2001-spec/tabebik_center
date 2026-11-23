@@ -2,17 +2,13 @@ import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
-import {statusToStored, storedToStatus, canTransition, canSetPrice, canCenterCompleteBooking} from "./policy.js";
+import {statusToStored, canTransition, canSetPrice, canCenterCompleteBooking, centerBookingProjection} from "./policy.js";
 
 initializeApp();
 const db = getFirestore();
 
 type CenterRole = "center_manager" | "center_reception";
-const operationalKeys = [
-  "patientUid", "centerId", "doctorLic", "phone", "name", "title",
-  "type", "svc", "dateIso", "when", "timeMin", "place", "status",
-  "price", "createdAt", "updatedAt"
-] as const;
+;
 
 function requireIdentity(request: { auth?: { uid: string; token: Record<string, unknown> } }) {
   if (!request.auth) throw new HttpsError("unauthenticated", "تسجيل الدخول مطلوب.");
@@ -38,14 +34,6 @@ async function requireManager(auth: { uid: string; token: Record<string, unknown
     throw new HttpsError("permission-denied", "هذه العملية متاحة لمدير المركز فقط.");
   }
   return membership;
-}
-function cleanOperationalBooking(id: string, data: FirebaseFirestore.DocumentData) {
-  const result: Record<string, unknown> = { bookingId: id };
-  for (const key of operationalKeys) if (data[key] !== undefined) result[key] = data[key];
-  result.patientName = typeof data.name === "string" ? data.name : "";
-  result.serviceType = Number(data.type) === 1 ? "bed" : Number(data.type) === 2 ? (Number(data.svc) === 2 ? "lab" : "home") : "doctor";
-  result.status = storedToStatus[String(data.status ?? "")] ?? String(data.status ?? "");
-  return result;
 }
 
 /** Trusted operator only: grant claims after independently verifying the center and member. */
@@ -113,7 +101,7 @@ export const listCenterBookings = onCall(async (request) => {
     .orderBy("createdAt", "desc")
     .limit(100)
     .get();
-  return { bookings: snap.docs.map((doc) => cleanOperationalBooking(doc.id, doc.data())) };
+  return { bookings: snap.docs.map((doc) => centerBookingProjection(doc.id, doc.data())) };
 });
 
 /** Role-scoped, transactional status update with a strict field allowlist. */
