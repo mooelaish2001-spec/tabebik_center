@@ -382,11 +382,13 @@ class Db extends ChangeNotifier {
   // Firebase live state shared with the patient and doctor applications.
   String remoteCenterId = '';
   StreamSubscription<List<Map<String, dynamic>>>? _remoteBookings, _remoteMembers, _remoteMemberships;
+  StreamSubscription<Map<String, dynamic>?>? _remoteCenter;
 
   void clearDemoForLive() {
     _remoteBookings?.cancel();
     _remoteMembers?.cancel();
     _remoteMemberships?.cancel();
+    _remoteCenter?.cancel();
     center = CenterProfile();
     me = null;
     members.clear();
@@ -448,6 +450,15 @@ class Db extends ChangeNotifier {
     _remoteBookings?.cancel();
     _remoteMembers?.cancel();
     _remoteMemberships?.cancel();
+    _remoteCenter?.cancel();
+    _remoteCenter = Fb.watchCenter(remoteCenterId).listen((row) {
+      if (row == null) return;
+      center
+        ..name = (row['name'] ?? center.name) as String
+        ..status = ((row['status'] ?? center.status) as num).toInt()
+        ..reason = (row['reason'] ?? center.reason) as String;
+      notifyListeners();
+    });
     _remoteBookings = Fb.bookingsOfCenter(remoteCenterId).listen((rows) {
       bookings
         ..clear()
@@ -1412,7 +1423,7 @@ class PendingScreen extends StatelessWidget {
                     if (rec != null) kv('الاستقبال', '${rec.name} · ${fmtPhone(rec.phone)}'),
                   ]),
                   if (cn.status == 2) panel([Text('سبب الرفض', style: t(13, c: kAmber)), gap(4), Text(cn.reason, style: t(13, w: FontWeight.w500, h: 1.6))]),
-                  if (cn.status == 0)
+                  if (cn.status == 0 && !Fb.on)
                     panel([
                       Text('وضع تجريبي', style: t(12.5, c: kAmber)),
                       gap(4),
