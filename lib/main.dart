@@ -37,7 +37,7 @@ void snack(BuildContext c, String m) => ScaffoldMessenger.of(c).showSnackBar(Sna
 
 /// يحوّل الأرقام العربية (٠-٩) والفارسية (۰-۹) إلى لاتينية حتى تعمل كل الحقول مع لوحة المفاتيح العربية.
 String latin(String s) => String.fromCharCodes(s.runes.map((r) => r >= 0x660 && r <= 0x669 ? r - 0x660 + 48 : r >= 0x6F0 && r <= 0x6F9 ? r - 0x6F0 + 48 : r));
-int num(String s) => int.tryParse(latin(s).replaceAll(',', '').trim()) ?? 0;
+int parseNum(String s) => int.tryParse(latin(s).replaceAll(',', '').trim()) ?? 0;
 
 /// يقبل الأرقام اللاتينية والعربية فقط.
 final digitsFmt = FilteringTextInputFormatter.allow(RegExp('[0-9\u0660-\u0669\u06F0-\u06F9]'));
@@ -571,7 +571,7 @@ class Db extends ChangeNotifier {
       'centerId': remoteCenterId,
       'centerName': center.name,
       'status': st,
-      'fee': num(d.price),
+      'fee': parseNum(d.price),
       'days': d.wd.toList()..sort(),
       'from': parseTime(d.from) ?? 480,
       'to': parseTime(d.to) ?? 1080,
@@ -580,7 +580,7 @@ class Db extends ChangeNotifier {
       'address': center.address,
       'centerPhone': center.phone,
       'home': d.home,
-      'homePrice': num(d.homePrice),
+      'homePrice': parseNum(d.homePrice),
       'accepting': d.on,
       'on': d.on,
       if (st == 'invitedByCenter') 'initiatedBy': 'center',
@@ -588,7 +588,7 @@ class Db extends ChangeNotifier {
         'name': d.p.name,
         'spec': d.p.spec,
         'quals': d.p.quals,
-        'exp': num(d.p.exp),
+        'exp': parseNum(d.p.exp),
         'female': d.p.gender == 1,
         'verified': d.p.verified,
         'claimed': d.p.claimed,
@@ -766,7 +766,7 @@ class Db extends ChangeNotifier {
   List<String> team(int svc) => svc == 0 ? [for (final d in docs) if (d.on && d.home && !d.invited) d.name] : staff.where((x) => x.contains(svc == 1 ? 'ممرض' : 'مختبر')).toList();
   int get fresh => bookings.where((b) => b.status == 'جديد').length;
   int get freeBeds => beds.where((b) => b.free).length;
-  int get revenue => bookings.where((b) => b.status == 'مؤكد' || b.status == 'مكتمل').fold<int>(0, (a, b) => a + num(b.price));
+  int get revenue => bookings.where((b) => b.status == 'مؤكد' || b.status == 'مكتمل').fold<int>(0, (a, b) => a + parseNum(b.price));
 }
 
 final db = Db();
@@ -1885,7 +1885,7 @@ class Terms {
 
   /// يرجع رسالة الخطأ أو null إن كانت الشروط صالحة.
   String? check() {
-    if (num(price.text) <= 0) return 'أدخل سعر الكشف';
+    if (parseNum(price.text) <= 0) return 'أدخل سعر الكشف';
     if (wd.isEmpty) return 'اختر يوم عمل واحداً على الأقل';
     final f = parseTime(from.text), e = parseTime(to.text);
     if (f == null || e == null) return 'اكتب ساعات الدوام بصيغة مثل 8:00 ص أو 5:30 م';
@@ -1894,12 +1894,12 @@ class Terms {
   }
 
   void fill(Doc d) {
-    d.price = money(num(price.text));
+    d.price = money(parseNum(price.text));
     d.wd = {...wd};
     d.from = fmtTime(parseTime(from.text) ?? 480); // check() يسبق fill() دائماً — القيمة الاحتياطية للأمان فقط
     d.to = fmtTime(parseTime(to.text) ?? 1080);
     d.home = home;
-    d.homePrice = home && num(homePrice.text) > 0 ? money(num(homePrice.text)) : '';
+    d.homePrice = home && parseNum(homePrice.text) > 0 ? money(parseNum(homePrice.text)) : '';
   }
 
   List<Widget> view(VoidCallback refresh) => [
@@ -2141,7 +2141,7 @@ class _DoctorFormState extends State<DoctorForm> {
     }
 
     final nm = n.text.trim().startsWith('د.') ? n.text.trim() : 'د. ' + n.text.trim();
-    final ex = exp.text.trim().isEmpty ? '0' : num(exp.text).toString();
+    final ex = exp.text.trim().isEmpty ? '0' : parseNum(exp.text).toString();
     try {
       if (d == null) {
         final p = DocProfile(council!, nm, kSpecs[spec.first], q.text.trim(), ex, gender: gender.first, phone: phone!, verified: false, mine: true, claimed: false);
@@ -2152,7 +2152,7 @@ class _DoctorFormState extends State<DoctorForm> {
             'name': p.name,
             'spec': p.spec,
             'quals': p.quals,
-            'exp': num(p.exp),
+            'exp': parseNum(p.exp),
             'female': p.gender == 1,
             'verified': false,
             'claimed': false,
@@ -2327,7 +2327,7 @@ void ask(BuildContext c, String title, String hint, String init, ValueChanged<St
 }
 
 void editFee(BuildContext c, String title, Svc s) => ask(c, title, '', s.price, (v) {
-      final n = num(v);
+      final n = parseNum(v);
       if (n > 0) {
         s.price = money(n);
         db.ping();
@@ -2347,8 +2347,8 @@ void addItem(BuildContext c, String title, List<Svc> list) {
       actions: [
         TextButton(
           onPressed: () {
-            if (n.text.trim().isEmpty || num(p.text) == 0) return snack(ctx, 'أدخل الاسم والسعر');
-            list.add(Svc(n.text.trim(), money(num(p.text))));
+            if (n.text.trim().isEmpty || parseNum(p.text) == 0) return snack(ctx, 'أدخل الاسم والسعر');
+            list.add(Svc(n.text.trim(), money(parseNum(p.text))));
             db.ping();
             Navigator.pop(ctx);
           },
@@ -2526,7 +2526,7 @@ class HomeDoctorScreen extends StatelessWidget {
                   ]),
                   if (d.home && d.on)
                     InkWell(
-                      onTap: () => ask(c, 'سعر زيارة ${d.name}', 'اتركه فارغاً لاستخدام السعر الافتراضي', d.homePrice, (v) { d.homePrice = num(v) > 0 ? money(num(v)) : ''; db.ping(); }, kb: TextInputType.number, suffix: 'ج.س'),
+                      onTap: () => ask(c, 'سعر زيارة ${d.name}', 'اتركه فارغاً لاستخدام السعر الافتراضي', d.homePrice, (v) { d.homePrice = parseNum(v) > 0 ? money(parseNum(v)) : ''; db.ping(); }, kb: TextInputType.number, suffix: 'ج.س'),
                       child: kv('سعر الزيارة المنزلية', '${d.homePrice.isEmpty ? db.svcs[0].price : d.homePrice} ج.س  ✎', bold: true),
                     ),
                 ]),
