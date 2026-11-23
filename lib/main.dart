@@ -632,16 +632,35 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     try {
       final centerId = await Fb.verifiedCenterId();
+      final profile = await Fb.fetchVerifiedCenterProfile();
       await Fb.fetchCenterBookings();
       final claims = (await user.getIdTokenResult(true)).claims ?? const <String, dynamic>{};
       final isManager = claims['role'] == 'center_manager';
-      final member = Member(user.displayName ?? 'مستخدم المركز', user.phoneNumber ?? '', isManager ? 0 : 1,
+      final member = Member(user.displayName ?? 'عضو المركز', user.phoneNumber ?? '', isManager ? 0 : 1,
           perms: isManager ? {0, 1, 2, 3} : {0});
       db.members
         ..clear()
         ..add(member);
       db.me = member;
-      db.center = CenterProfile(name: 'مركزك', status: 1);
+      final rawServices = profile['svc'];
+      final serviceSet = rawServices is List
+          ? rawServices.map((v) => (v as num).toInt()).toSet()
+          : <int>{0, 1, 2};
+      db.center = CenterProfile(
+        name: (profile['name'] ?? 'مركزك').toString(),
+        kind: (profile['kind'] as num?)?.toInt() ?? 1,
+        lic: (profile['lic'] ?? '').toString(),
+        state: (profile['state'] as num?)?.toInt() ?? 0,
+        locality: (profile['locality'] ?? '').toString(),
+        address: (profile['address'] ?? '').toString(),
+        phone: (profile['phone'] ?? '').toString(),
+        from: (profile['from'] ?? '8:00 ص').toString(),
+        to: (profile['to'] ?? '10:00 م').toString(),
+        svc: serviceSet,
+        status: 1,
+        reqNo: (profile['reqNo'] ?? '').toString(),
+        docAttached: profile['docAttached'] == true,
+      );
       db.bookings.clear();
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(context,
