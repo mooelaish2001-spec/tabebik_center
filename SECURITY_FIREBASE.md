@@ -65,9 +65,20 @@ The center repository now contains a Node.js 20 / TypeScript Functions codebase:
 ### Important deployment and integration blockers
 - No function has been deployed. No Firebase rules were opened.
 - A trusted operator must provision the first platform administrator out-of-band using the Admin SDK after identity verification. No client-facing bootstrap endpoint exists.
-- The Flutter center app still has no verified Firebase Auth/custom-claims session flow wired to these callables. Do not treat its local/demo login as authentication and do not expose these operations from it yet.
+- The Flutter center app now creates a persistent Firebase Anonymous Auth identity when Firebase is initialized, displays the UID, and refuses entry until a trusted platform administrator assigns matching center_manager or center_reception custom claims and a matching active centerMembers/{uid} record. Anonymous Auth alone grants no center access. The login and demo OTP paths are removed. The platform administrator must verify the center/operator out-of-band before provisioning the UID.
 - The booking schema must be migrated so each `bookings/{id}` document contains operational fields only. The callable projection reduces accidental disclosure but cannot make a mixed-schema document safe for direct client reads.
 - Firestore index may be required for `centerId + createdAt desc`; create it only after validating the deployed query and index error.
 - Firebase Emulator authorization tests, real dependency installation/build, claims provisioning runbook, consent lifecycle, medical encryption/key management, and production security review remain required.
 
 The backend is a guarded first implementation, not a production-ready booking service. Keep the current deny-by-default Firestore and Storage rules until the remaining gates pass.
+
+
+## Center app integration update — 2026-11-23
+- The center app initializes Firebase and attempts a persistent Firebase Anonymous Auth session. This is an identity placeholder only; no access is granted until a platform administrator provisions the UID with appropriate custom claims and a matching active membership document after out-of-band verification.
+- Demo login, fake OTP UI/service, and seeded demo center/doctor registry data were removed/disabled.
+- The center bookings screen now calls listCenterBookings and status changes call updateCenterBooking; it no longer relies on the local demo booking list for this screen.
+- The callable projection maps the current patient booking schema to center-friendly labels and excludes visit, complaints, diagnoses, medical history, and private records.
+- The center sets the price when confirming a pending booking. The backend rejects a missing/zero price and rejects price changes outside that transition.
+- The center cannot mark a doctor appointment completed; only the assigned doctor can complete an in-person visit and issue the encounter code.
+- firestore.indexes.json includes the centerId + createdAt descending index used by the booking inbox.
+- No Functions or rules have been deployed, and the Firestore/Storage rules remain fail-closed.
