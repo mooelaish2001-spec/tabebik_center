@@ -538,7 +538,17 @@ class Db extends ChangeNotifier {
         if (status == 'requestedByDoctor') {
           nextReqs.add(JoinReq(p, price: price, wd: days, from: fmtTime(fromMin), to: fmtTime(toMin)));
         } else {
-          nextDocs.add(Doc(p, price: price, wd: days, from: fmtTime(fromMin), to: fmtTime(toMin), invited: status == 'invitedByCenter'));
+          nextDocs.add(Doc(
+            p,
+            price: price,
+            wd: days,
+            from: fmtTime(fromMin),
+            to: fmtTime(toMin),
+            on: row['on'] != false && row['accepting'] != false,
+            home: row['home'] == true,
+            homePrice: money(((row['homePrice'] ?? 0) as num).toInt()),
+            invited: status == 'invitedByCenter',
+          ));
         }
       }
       docs
