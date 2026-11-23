@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,13 +7,13 @@ import 'tabibak_firebase.dart';
 // ═══════════════ طبيبك — تطبيق المركز (Center app) ═══════════════
 // يستخدم نفس تصميم تطبيق المستخدمين. البيانات في الذاكرة (Db) وتتحدّث لحظياً بين الشاشات.
 //
-// الدخول والتسجيل: برقم الهاتف + رمز تحقق OTP (بدون بريد إلكتروني ولا كلمة مرور).
+// الدخول: جلسة Firebase موجودة مسبقاً وصلاحيات مركز صادرة من الخادم؛ لا يوجد OTP أو دخول تجريبي.
 //   • مدير المركز يسجّل المركز ويتحقق من هاتفه، ثم يضيف حساب الاستقبال (دخوله أيضاً برقمه + OTP).
 //   • إضافة أخصائي: يُبحث برقم تسجيله في المجلس الطبي؛ إن كان مسجّلاً في طبيبك يظهر ملفه مباشرة
 //     ويُضاف بشروط المركز، وإلا يُسجَّل كأخصائي جديد (قيد التحقق).
 //
 // تنبيه: هذه نسخة واجهة تجريبية. ما يلي يحتاج خادماً حقيقياً في النسخة الإنتاجية:
-//   1) إرسال/التحقق من OTP عبر بوابة SMS (الكود هنا يُعرض على الشاشة للتجربة فقط — OtpService).
+//   1) إنشاء/ربط جلسات Firebase المعتمدة يتم خارج التطبيق بواسطة إدارة المنصة؛ لا توجد آلية OTP داخل هذا التطبيق.
 //   2) سجلّ الأخصائيين (Db.registry) وقرار اعتماد المراكز (لوحة إدارة طبيبك).
 //   3) رفع صورة الترخيص، الإشعارات، الصلاحيات، وحذف الحساب (كلها يجب أن تُنفَّذ وتُفرَض من الخادم).
 
@@ -553,51 +551,6 @@ const kHomeNames = ['زيارة طبيب', 'تمريض منزلي', 'سحب عي
 const kHomeIcons = [Icons.medical_services_rounded, Icons.vaccines_rounded, Icons.bloodtype_rounded];
 const kWho = ['طبيب', 'ممرض', 'فني مختبر'];
 
-// ═══════════════ OTP (رمز التحقق) ═══════════════
-class _OtpEntry {
-  _OtpEntry(this.code) : at = DateTime.now();
-  final String code;
-  final DateTime at;
-  int tries = 0;
-}
-
-/// نموذج تجريبي محلي لرمز التحقق.
-/// في الإنتاج: الخادم يولّد الرمز ويرسله بـ SMS ولا يعيده للتطبيق أبداً، ويتحقق منه ويحدّ المحاولات وعدد الإرسال لكل رقم.
-/// هنا send() يرجع الرمز ليُعرض على الشاشة (للتجربة فقط).
-class OtpService {
-  final _m = <String, _OtpEntry>{};
-  static const maxTries = 5;
-  static const ttl = Duration(minutes: 5);
-
-  String send(String phone) {
-    final code = (100000 + Random.secure().nextInt(900000)).toString();
-    _m[phone] = _OtpEntry(code);
-    return code;
-  }
-
-  /// يرجع null عند النجاح، وإلا رسالة الخطأ.
-  String? check(String phone, String code) {
-    final o = _m[phone];
-    if (o == null) return 'اطلب رمزاً جديداً أولاً';
-    if (DateTime.now().difference(o.at) > ttl) {
-      _m.remove(phone);
-      return 'انتهت صلاحية الرمز، اطلب رمزاً جديداً';
-    }
-    o.tries++;
-    if (o.code != code) {
-      if (o.tries >= maxTries) {
-        _m.remove(phone);
-        return 'تجاوزت عدد المحاولات، اطلب رمزاً جديداً';
-      }
-      return 'الرمز غير صحيح (${maxTries - o.tries} محاولات متبقية)';
-    }
-    _m.remove(phone);
-    return null;
-  }
-}
-
-final otp = OtpService();
-
 // ═══════════════ Shell ═══════════════
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -786,107 +739,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 }
 
-// ── OTP (شاشة مشتركة: الدخول والتسجيل) ──
-class OtpScreen extends StatefulWidget {
-  const OtpScreen(this.phone, this.onVerified, {super.key});
-  final String phone;
-  final void Function(BuildContext) onVerified; // تُستدعى بعد نجاح التحقق
-  @override
-  State<OtpScreen> createState() => _OtpState();
-}
-
-class _OtpState extends State<OtpScreen> {
-  final ctl = TextEditingController();
-  Timer? timer;
-  int left = 0;
-  String demoCode = '';
-  String? err;
-  bool busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    send();
-  }
-
-  @override
-  void dispose() {
-    timer?.cancel();
-    ctl.dispose();
-    super.dispose();
-  }
-
-  void send() {
-    demoCode = otp.send(widget.phone);
-    ctl.clear();
-    err = null;
-    left = 60;
-    timer?.cancel();
-    timer = Timer.periodic(const Duration(seconds: 1), (tm) {
-      if (!mounted) {
-        tm.cancel();
-        return;
-      }
-      setState(() => left--);
-      if (left <= 0) tm.cancel();
-    });
-  }
-
-  void verify() {
-    if (busy) return;
-    final code = latin(ctl.text).trim();
-    if (code.length != 6) {
-      setState(() => err = 'أدخل الرمز المكوّن من 6 أرقام');
-      return;
-    }
-    final e = otp.check(widget.phone, code);
-    if (e != null) {
-      setState(() => err = e);
-      return;
-    }
-    busy = true;
-    widget.onVerified(context);
-  }
-
-  @override
-  Widget build(BuildContext context) => RPage(
-        'التحقق من الرقم',
-        bottom: bar(context, [btn('تحقق', verify)]),
-        body: ListView(padding: const EdgeInsets.all(20), children: [
-          gap(10),
-          Center(child: tile(Icons.sms_rounded, size: 76, dark: true)),
-          gap(16),
-          Center(child: Text('أدخل رمز التحقق', style: t(19, w: FontWeight.w800))),
-          gap(6),
-          Center(child: Text('أرسلنا رمزاً من 6 أرقام إلى', style: t(12.5, w: FontWeight.w500, c: kGrey))),
-          Center(child: Text(fmtPhone(widget.phone), textDirection: TextDirection.ltr, style: t(15))),
-          gap(14),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: kAmberBg, borderRadius: BorderRadius.circular(14)),
-            child: Text('وضع تجريبي: لا تُرسَل رسالة SMS فعلية في هذا النموذج.\nرمز التحقق: $demoCode', style: t(12.5, c: kAmber, h: 1.7)),
-          ),
-          gap(6),
-          fld('رمز التحقق', ctl,
-              kb: TextInputType.number, ltr: true, hint: '------', align: TextAlign.center,
-              fmt: [digitsFmt, LengthLimitingTextInputFormatter(6)],
-              style: t(24, w: FontWeight.w800).copyWith(letterSpacing: 10),
-              onChanged: (v) {
-                if (err != null) setState(() => err = null);
-                if (latin(v).length == 6) verify();
-              }),
-          if (err != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(err!, style: t(12, c: kRed))),
-          gap(16),
-          Center(
-            child: left > 0
-                ? Text('إعادة الإرسال بعد $left ثانية', style: t(12.5, w: FontWeight.w500, c: kGrey))
-                : GestureDetector(onTap: () => setState(send), child: Text('إعادة إرسال الرمز', style: t(13.5, c: kRed))),
-          ),
-        ]),
-      );
-}
-
-// ── Register 1/2: رقم هاتف المدير + OTP ──
+// ── Register request placeholder: provisioning is server-admin only ──
 class RegisterPhoneScreen extends StatefulWidget {
   const RegisterPhoneScreen({super.key, this.initial = ''});
   final String initial;
@@ -918,12 +771,12 @@ class _RegPhoneState extends State<RegisterPhoneScreen> {
   @override
   Widget build(BuildContext context) => RPage(
         'تسجيل مركز جديد',
-        bottom: bar(context, [btn('إرسال رمز التحقق', next)]),
+        bottom: bar(context, [btn('متابعة طلب التسجيل', next)]),
         body: ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 16), children: [
           panel([
-            Text('ابدأ برقم هاتف مدير المركز', style: t(15.5, w: FontWeight.w800)),
+            Text('طلب تفعيل مركز جديد', style: t(15.5, w: FontWeight.w800)),
             gap(4),
-            Text('نرسل إليه رمز تحقق لإثبات ملكية الرقم. لا نحتاج بريداً إلكترونياً، وبه يدخل المدير إلى حسابه لاحقاً.', style: t(12.5, w: FontWeight.w500, c: kGrey, h: 1.6)),
+            Text('تسجيل المركز واعتماد هويته وإنشاء حساب المدير يتم عبر إدارة المنصة. لا تُنشأ صلاحيات من هذا النموذج المحلي.', style: t(12.5, w: FontWeight.w500, c: kGrey, h: 1.6)),
           ]),
           phoneFld('رقم هاتف مدير المركز', p),
           sec('ما الذي سيأتي بعد ذلك؟'),
