@@ -139,6 +139,9 @@ export const updateCenterBooking = onCall(async (request) => {
     if (status === "completed" && Number(snap.get("type") ?? 0) === 0) {
       throw new HttpsError("failed-precondition", "Doctor appointments can only be completed by the assigned doctor after the in-person encounter.");
     }
+    if (price !== undefined && (status !== "confirmed" || current !== "جديد")) {
+      throw new HttpsError("failed-precondition", "Price can only be set while confirming a new booking.");
+    }
     if (status === "confirmed" && price === undefined && Number(snap.get("price") ?? 0) <= 0) {
       throw new HttpsError("failed-precondition", "Set the center-approved price before confirming the booking.");
     }
