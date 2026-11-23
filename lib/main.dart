@@ -1684,8 +1684,15 @@ class ManageScreen extends StatelessWidget {
 class DoctorsScreen extends StatelessWidget {
   const DoctorsScreen({super.key});
 
-  void _accept(BuildContext c, JoinReq r) {
-    if (db.linked(r.p) == null) db.docs.add(Doc(r.p, price: r.price, wd: {...r.wd}, from: r.from, to: r.to));
+  Future<void> _accept(BuildContext c, JoinReq r) async {
+    final d = db.linked(r.p) ?? Doc(r.p, price: r.price, wd: {...r.wd}, from: r.from, to: r.to);
+    if (!db.docs.contains(d)) db.docs.add(d);
+    try {
+      await db.persistMembership(d, status: 'active');
+    } catch (_) {
+      snack(c, 'تعذّر تأكيد الانضمام. حاول مجدداً.');
+      return;
+    }
     db.joinReqs.remove(r);
     db.ping();
     snack(c, 'تمت إضافة ${r.p.name} إلى مركزك');
@@ -1887,13 +1894,36 @@ class _LookupState extends State<DoctorLookupScreen> {
     }
     FocusScope.of(context).unfocus();
     setState(() => st = Look.busy);
-    await Future<void>.delayed(const Duration(milliseconds: 500)); // يحاكي طلب الشبكة — اربطه بواجهة البحث في سجل الأخصائيين
+    DocProfile? p;
+    if (Fb.on) {
+      try {
+        final row = await Fb.getDoctor(n);
+        if (row != null) {
+          p = DocProfile(
+            n,
+            (row['name'] ?? '') as String,
+            (row['spec'] ?? '') as String,
+            (row['quals'] ?? '') as String,
+            '${row['exp'] ?? 0}',
+            gender: row['female'] == true ? 1 : 0,
+            verified: row['verified'] == true,
+            claimed: row['claimed'] == true,
+          );
+        }
+      } catch (_) {
+        if (mounted) setState(() => st = Look.idle);
+        if (mounted) snack(context, 'تعذّر البحث في سجل الأطباء. تحقق من الاتصال والصلاحيات.');
+        return;
+      }
+    } else {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      p = db.lookup(n);
+    }
     if (!mounted) return;
     if (normLic(lic.text) != n) {
-      setState(() => st = Look.idle); // غيّر المستخدم الرقم أثناء البحث
+      setState(() => st = Look.idle);
       return;
     }
-    final p = db.lookup(n);
     setState(() {
       searched = n;
       prof = p;
@@ -1918,18 +1948,28 @@ class _LookupState extends State<DoctorLookupScreen> {
     }
   }
 
-  void add() {
+  Future<void> add() async {
     final e = tm.check();
     if (e != null) {
       snack(context, e);
       return;
     }
-    final d = Doc(prof!, invited: true); // يحتاج موافقة الطبيب قبل أن يظهر للمرضى
+    final d = Doc(prof!, invited: true);
     tm.fill(d);
     db.docs.add(d);
+    try {
+      await db.persistMembership(d, status: 'invitedByCenter');
+    } catch (_) {
+      db.docs.remove(d);
+      db.ping();
+      if (mounted) snack(context, 'تعذّر إرسال الدعوة. تحقق من اتصال Firebase وصلاحيات المركز.');
+      return;
+    }
     db.ping();
-    snack(context, 'أُرسلت دعوة الانضمام إلى ${prof!.name} — تُفعَّل بعد موافقته');
-    Navigator.pop(context);
+    if (mounted) {
+      snack(context, 'أُرسلت دعوة الانضمام إلى ${prof!.name} — تُفعَّل بعد موافقته');
+      Navigator.pop(context);
+    }
   }
 
   void openExisting() {
