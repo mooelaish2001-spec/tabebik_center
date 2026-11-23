@@ -259,7 +259,6 @@ const kStates = ['الخرطوم', 'الجزيرة', 'البحر الأحمر', 
 const kRoles = ['مدير المركز', 'استقبال']; // الفهرس = Member.role
 const kPerms = ['الحجوزات: قبول ورفض وإنهاء', 'الأسرّة', 'الأخصائيون والخدمات المنزلية', 'التقارير والإيرادات']; // الفهرس = رقم الصلاحية في Db.can
 const kSupportPhone = '+249 900 000 000'; // TODO: استبدله برقم الدعم الحقيقي
-const kDemoManager = '+249912000111', kDemoReception = '+249923000222';
 
 // ═══════════════ Data ═══════════════
 class Booking {
@@ -351,17 +350,7 @@ class Db extends ChangeNotifier {
   final members = <Member>[];
 
   /// سجل الأخصائيين في طبيبك (على مستوى المنصة — في الإنتاج يأتي من الخادم).
-  final registry = <DocProfile>[
-    DocProfile('12345', 'د. أحمد محمد علي', 'باطنية', 'ماجستير + دكتوراه باطنية - جامعة الخرطوم', '10', phone: '+249911000001', others: 1),
-    DocProfile('23456', 'د. سارة عبد الله', 'نساء وتوليد', 'بكالوريوس الطب + دبلوم نساء وتوليد', '7', gender: 1, phone: '+249911000002', others: 2),
-    DocProfile('34567', 'د. حسن محمود', 'أطفال', 'ماجستير طب الأطفال', '9', phone: '+249911000003'),
-    DocProfile('45678', 'د. منى الطيب', 'جلدية', 'ماجستير الأمراض الجلدية - جامعة النيلين', '8', gender: 1, phone: '+249911000004', others: 2),
-    DocProfile('56789', 'د. عثمان صالح', 'عظام', 'بورد جراحة العظام - المجلس السوداني للتخصصات الطبية', '14', phone: '+249911000005', others: 1),
-    DocProfile('67890', 'د. ياسر إبراهيم', 'قلب', 'دكتوراه أمراض القلب - جامعة أم درمان الإسلامية', '11', phone: '+249911000006', others: 3),
-    DocProfile('78901', 'د. إيمان حسن', 'أنف وأذن وحنجرة', 'بكالوريوس الطب والجراحة + دبلوم أنف وأذن', '4', gender: 1, phone: '+249911000007', verified: false, others: 1),
-    // سجّله هذا المركز ولم يفعّل حسابه بعد (claimed=false): يُربط ملفه تلقائياً حين يدخل تطبيق الطبيب بالمجلس 89012 والهاتف 912345001.
-    DocProfile('89012', 'د. طارق يوسف', 'عيون', 'بكالوريوس الطب والجراحة + دبلوم عيون', '5', phone: '+249912345001', verified: false, mine: true),
-  ];
+  final registry = <DocProfile>[];
 
   final bookings = <Booking>[];
   final joinReqs = <JoinReq>[]; // طلبات انضمام واردة من أطباء
@@ -375,49 +364,6 @@ class Db extends ChangeNotifier {
   final visitSlots = <int>{0, 2}, labSlots = <int>{0, 1};
 
   DocProfile _p(String lic) => registry.firstWhere((p) => p.lic == lic);
-
-  /// يحمّل مركزاً تجريبياً كاملاً (حجوزات وأخصائيون وأسرّة ومستخدمون).
-  void loadDemo() {
-    center = CenterProfile(name: 'مركز المسباح الطبي', kind: 1, lic: '8841', state: 0, locality: 'بحري', address: 'المسبح، شارع 15', phone: '+249 912 000 111', status: 1, reqNo: '20260001', docAttached: true);
-    members
-      ..clear()
-      ..addAll([Member('إبراهيم الحاج', kDemoManager, 0), Member('منى عثمان', kDemoReception, 1)]);
-    me = null;
-    bookings
-      ..clear()
-      ..addAll([
-        Booking(1, 0, 'محمد عبد الرحيم', '+249 912 345 678', 'كشف · د. أحمد محمد علي (باطنية)', 'السبت 18 أكتوبر · 6:30 م', '10,000', ''),
-        Booking(2, 0, 'آمنة إبراهيم', '+249 923 111 222', 'كشف · د. سارة عبد الله (نساء وتوليد)', 'الأحد 19 أكتوبر · 6:00 م', '8,000', ''),
-        Booking(3, 1, 'خالد يوسف', '+249 91 555 0101', 'حجز سرير ICU · 3 أيام', 'دخول السبت 18 أكتوبر', '45,000', 'ICU'),
-        Booking(4, 2, 'فاطمة أحمد', '+249 99 888 7766', 'تمريض منزلي · حقن وريدي', 'الاثنين 20 أكتوبر · 9:00 ص', '3,000', 'الخرطوم - بحري - المسبح', svc: 1),
-        Booking(5, 2, 'عمر حسن', '+249 90 321 4455', 'سحب عينات · صورة دم + سكر', 'الثلاثاء 21 أكتوبر · 8:00 ص', '730', 'أم درمان - الثورة', status: 'مؤكد', svc: 2),
-        Booking(6, 0, 'ليلى محمود', '+249 92 444 3322', 'كشف · د. حسن محمود (أطفال)', 'الأحد 19 أكتوبر · 5:00 م', '7,500', '', status: 'مؤكد'),
-        Booking(7, 1, 'سمير علي', '+249 91 777 6655', 'حجز سرير HDU · 2 أيام', 'دخول 12 أكتوبر', '24,000', 'HDU', status: 'مكتمل'),
-        Booking(8, 2, 'نجلاء إبراهيم', '+249 91 222 3344', 'زيارة طبيب · د. أحمد محمد علي (باطنية)', 'الأربعاء 22 أكتوبر · 5:00 م', '15,000', 'الخرطوم - شرق النيل - الرياض', svc: 0),
-      ]);
-    docs
-      ..clear()
-      ..addAll([
-        Doc(_p('12345'), price: '10,000', wd: {0, 1, 2, 3, 4, 5}, from: '5:00 م', to: '8:00 م', home: true, homePrice: '15,000'),
-        Doc(_p('23456'), price: '8,000', wd: {1, 2, 3, 4, 5}, from: '9:00 ص', to: '5:00 م', home: true),
-        Doc(_p('34567'), price: '7,500', wd: {0, 1, 2, 3, 4}, from: '10:00 ص', to: '6:00 م', on: false),
-        Doc(_p('89012'), price: '6,000', wd: {0, 1, 2, 3, 4}, from: '9:00 ص', to: '3:00 م', invited: true),
-      ]);
-    joinReqs
-      ..clear()
-      ..add(JoinReq(_p('45678'), price: '9,000', wd: {1, 3}, from: '4:00 م', to: '8:00 م'));
-    beds
-      ..clear()
-      ..addAll([
-        Bed('ICU', '101', '1', '15,000', 'جهاز تنفس · مونيتور'), Bed('ICU', '102', '1', '15,000', 'جهاز تنفس · مونيتور', free: false), Bed('ICU', '103', '1', '15,000', 'مونيتور'),
-        Bed('HDU', '201', '2', '12,000', 'مونيتور · أكسجين'), Bed('HDU', '202', '2', '12,000', 'أكسجين'), Bed('CCU', '301', '3', '18,000', 'مونيتور قلب', free: false),
-        Bed('عادية', '401', '4', '6,000', 'تكييف'), Bed('عادية', '402', '4', '6,000', 'تكييف'), Bed('عادية', '403', '4', '6,000', '', free: false),
-      ]);
-    staff
-      ..clear()
-      ..addAll(['أحمد عثمان · ممرض', 'هالة محمد · ممرضة', 'معتز علي · فني مختبر']);
-    notifyListeners();
-  }
 
   void set(Booking b, String s, {String note = '', String who = ''}) {
     if (!can(0)) return;
@@ -678,14 +624,6 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final u = TextEditingController();
-
-  @override
-  void dispose() {
-    u.dispose();
-    super.dispose();
-  }
-
   Future<void> next() async {
     if (!Fb.on) {
       return snack(context, 'Firebase غير مهيأ لهذا الإصدار. لا يمكن فتح حساب تجريبي.');
@@ -725,7 +663,11 @@ class _LoginScreenState extends State<LoginScreen> {
               Center(child: Text('تسجيل دخول المركز', style: t(21, w: FontWeight.w800))),
               gap(4),
               Center(child: Text('الدخول متاح للحسابات التي اعتمدتها إدارة طبيبك وربطتها بالمركز. لا يوجد OTP أو حساب تجريبي.', textAlign: TextAlign.center, style: t(12, w: FontWeight.w500, c: kGrey, h: 1.6))),
-              lockedRow('معرّف جلسة Firebase', Fb.user?.uid ?? 'غير متاح — تحقق من إعداد Firebase'),
+              panel([
+                Text('معرّف جلسة Firebase', style: t(12.5, w: FontWeight.w700)),
+                gap(6),
+                SelectableText(Fb.user?.uid ?? 'غير متاح — تحقق من إعداد Firebase', textDirection: TextDirection.ltr, style: t(12, w: FontWeight.w600, c: kInk)),
+              ]),
               gap(8),
               Text('انسخ معرّف الجلسة وأرسله لإدارة طبيبك بعد اعتماد المركز. لا تمنح الجلسة المجهولة أي صلاحيات حتى يربطها مسؤول المنصة بمركزك.', style: t(11.5, w: FontWeight.w500, c: kGrey, h: 1.6)),
               gap(18),
