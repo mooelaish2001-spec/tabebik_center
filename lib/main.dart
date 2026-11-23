@@ -989,7 +989,7 @@ class _LoginScreenState extends State<LoginScreen> {
               gap(10),
               btn('تسجيل مركز جديد', () => go(context, RegisterPhoneScreen(initial: u.text)), outline: true, h: 46),
               gap(18),
-              panel([
+              if (!Fb.on) panel([
                 Text('حسابات تجريبية (بيانات نموذجية)', style: t(12.5, c: kAmber)),
                 gap(8),
                 Wrap(spacing: 8, runSpacing: 8, children: [
@@ -1267,10 +1267,6 @@ class _WizardState extends State<RegisterWizard> {
       }
       try {
         final id = Fb.newCenterId();
-        final licensePath = await Fb.uploadPrivate(
-          'licenses/$id/${DateTime.now().millisecondsSinceEpoch}.jpg',
-          licenseBytes!,
-        );
         await Fb.createCenter(id, {
           'name': profile.name,
           'kind': profile.kind,
@@ -1286,7 +1282,7 @@ class _WizardState extends State<RegisterWizard> {
           'reqNo': profile.reqNo,
           'managerUid': Fb.uid,
           'managerPhone': widget.phone,
-          'licensePath': licensePath,
+          'licensePath': '',
         }, widget.phone, {
           'uid': Fb.uid,
           'centerId': id,
@@ -1296,6 +1292,11 @@ class _WizardState extends State<RegisterWizard> {
           'perms': [0, 1, 2, 3],
           'active': true,
         });
+        final licensePath = await Fb.uploadPrivate(
+          'licenses/$id/${DateTime.now().millisecondsSinceEpoch}.jpg',
+          licenseBytes!,
+        );
+        await Fb.saveCenter(id, {'licensePath': licensePath});
         if (rec != null) {
           await Fb.saveMember(rec.phone, {
             'uid': '',
