@@ -674,7 +674,8 @@ class _LoginScreenState extends State<LoginScreen> {
         MaterialPageRoute(builder: (_) => const HomeScreen()), (route) => false);
       snack(context, 'تم التحقق من عضوية المركز: $centerId');
     } catch (e) {
-      if (mounted) snack(context, 'الحساب غير معتمد بعد. معرّف الجلسة: ${Fb.user?.uid ?? 'غير متاح'} — أرسله لإدارة المنصة.');
+      final sessionUid = Fb.user?.uid ?? "غير متاح";
+      if (mounted) snack(context, 'الحساب غير معتمد بعد. معرّف الجلسة: $sessionUid — أرسله لإدارة المنصة.');
     }
   }
 
