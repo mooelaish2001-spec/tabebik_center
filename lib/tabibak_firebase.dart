@@ -340,12 +340,14 @@ class Fb {
     return rows.map((row) => Map<String, dynamic>.from(row as Map)).toList();
   }
 
-  static Future<void> updateCenterBookingStatus(String bookingId, String status) async {
+  static Future<void> updateCenterBookingStatus(String bookingId, String status, {int? price}) async {
     if (bookingId.trim().isEmpty) throw ArgumentError('bookingId is required.');
+    if (price != null && (price < 0 || price > 100000000)) throw ArgumentError('Invalid price.');
     await verifiedCenterId();
     await _functions.httpsCallable('updateCenterBooking').call({
       'bookingId': bookingId,
       'status': status,
+      if (price != null) 'price': price,
     });
   }
 
