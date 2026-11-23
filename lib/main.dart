@@ -1728,6 +1728,9 @@ class DoctorsScreen extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: btn('رفض', () => confirm(c, 'رفض الطلب', 'سيُبلَّغ ${r.p.name} برفض طلب الانضمام.', 'رفض', () {
+                    if (Fb.on) {
+                      Fb.setMembership('${r.p.lic}_${db.remoteCenterId}', {'status': 'removed'}).catchError((_) {});
+                    }
                     db.joinReqs.remove(r);
                     db.ping();
                   }), outline: true, h: 42),
@@ -1751,6 +1754,7 @@ class DoctorsScreen extends StatelessWidget {
                 if (!d.p.verified) ...[pill('قيد التحقق', kAmberBg, kAmber), const SizedBox(width: 6)],
                 Switch(value: d.on, onChanged: (v) {
                   d.on = v;
+                  db.persistMembership(d, status: d.invited ? 'invitedByCenter' : 'active').catchError((_) {});
                   db.ping();
                 }),
               ],
@@ -1760,7 +1764,7 @@ class DoctorsScreen extends StatelessWidget {
             kv('الدوام', '${d.days} · ${d.hours}'),
             kv('سعر الكشف', '${d.price} ج.س', bold: true),
             if (d.invited) Padding(padding: const EdgeInsets.only(top: 4), child: Text(d.p.claimed ? 'أُرسلت له دعوة الانضمام؛ لا يظهر للمرضى حتى يوافق.' : 'لم يفعّل حسابه بعد؛ تصله الدعوة عند دخوله بالرقم المسجّل.', style: t(11.5, w: FontWeight.w500, c: kAmber, h: 1.6))),
-            if (d.invited && kSimulate)
+            if (d.invited && kSimulate && !Fb.on)
               Align(
                 alignment: AlignmentDirectional.centerStart,
                 child: TextButton(
@@ -2151,6 +2155,7 @@ class _DoctorFormState extends State<DoctorForm> {
             btn('إزالة من المركز', () {
               if (db.hasUpcoming(d!)) return snack(context, 'لا يمكن الإزالة: لدى ${d!.name} حجوزات قادمة. أنهِها أو ارفضها أولاً، أو أوقف استقباله من القائمة.');
               confirm(context, 'إزالة الأخصائي', 'سيُزال ${d!.name} من مركزك فقط، ويبقى ملفه في طبيبك.', 'إزالة', () {
+                db.removeMembership(d!).catchError((_) {});
                 db.docs.remove(d);
                 db.ping();
                 Navigator.pop(context);
