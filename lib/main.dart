@@ -1955,12 +1955,13 @@ class _LookupState extends State<DoctorLookupScreen> {
       setState(() => st = Look.idle);
       return;
     }
+    final found = p;
     setState(() {
       searched = n;
-      prof = p;
-      if (p == null) {
+      prof = found;
+      if (found == null) {
         st = Look.none;
-      } else if (db.linked(p) != null) {
+      } else if (db.linked(found) != null) {
         st = Look.already;
       } else {
         st = Look.found;
