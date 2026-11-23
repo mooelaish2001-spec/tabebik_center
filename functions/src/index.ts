@@ -7,18 +7,22 @@ initializeApp();
 const db = getFirestore();
 
 type CenterRole = "center_manager" | "center_reception";
-const allowedStatuses = new Set(["pending", "confirmed", "rejected", "cancelled", "completed"]);
+const statusToStored: Record<string, string> = {
+  pending: "جديد", confirmed: "مؤكد", rejected: "مرفوض",
+  cancelled: "ملغي", completed: "مكتمل"
+};
+const storedToStatus: Record<string, string> = Object.fromEntries(
+  Object.entries(statusToStored).map(([api, stored]) => [stored, api])
+);
 const transitions: Record<string, Set<string>> = {
-  pending: new Set(["confirmed", "rejected", "cancelled"]),
-  confirmed: new Set(["cancelled", "completed"]),
-  rejected: new Set(),
-  cancelled: new Set(),
-  completed: new Set()
+  "جديد": new Set(["مؤكد", "مرفوض", "ملغي"]),
+  "مؤكد": new Set(["ملغي", "مكتمل"]),
+  "مرفوض": new Set(), "ملغي": new Set(), "مكتمل": new Set()
 };
 const operationalKeys = [
-  "bookingId", "patientUid", "centerId", "doctorLic", "doctorName",
-  "serviceType", "dateIso", "time", "status", "price", "pay",
-  "arrived", "createdAt", "updatedAt"
+  "patientUid", "centerId", "doctorLic", "phone", "name", "title",
+  "type", "svc", "dateIso", "when", "timeMin", "place", "status",
+  "price", "createdAt", "updatedAt"
 ] as const;
 
 function requireIdentity(request: { auth?: { uid: string; token: Record<string, unknown> } }) {
@@ -48,9 +52,10 @@ async function requireManager(auth: { uid: string; token: Record<string, unknown
 }
 function cleanOperationalBooking(id: string, data: FirebaseFirestore.DocumentData) {
   const result: Record<string, unknown> = { bookingId: id };
-  for (const key of operationalKeys) {
-    if (key !== "bookingId" && data[key] !== undefined) result[key] = data[key];
-  }
+  for (const key of operationalKeys) if (data[key] !== undefined) result[key] = data[key];
+  result.patientName = typeof data.name === "string" ? data.name : "";
+  result.serviceType = Number(data.type) === 1 ? "bed" : Number(data.type) === 2 ? "home" : "doctor";
+  result.status = storedToStatus[String(data.status ?? "")] ?? String(data.status ?? "");
   return result;
 }
 
@@ -126,10 +131,11 @@ export const listCenterBookings = onCall(async (request) => {
 export const updateCenterBooking = onCall(async (request) => {
   const auth = requireIdentity(request);
   const membership = await requireCenterRole(auth);
-  const { bookingId, status } = request.data ?? {};
+  const { bookingId, status, price } = request.data ?? {};
   if (typeof bookingId !== "string" || !bookingId.trim() ||
-      typeof status !== "string" || !allowedStatuses.has(status)) {
-    throw new HttpsError("invalid-argument", "bookingId and a valid status are required.");
+      typeof status !== "string" || !Object.prototype.hasOwnProperty.call(statusToStored, status) ||
+      (price !== undefined && (!Number.isSafeInteger(price) || price < 0 || price > 100000000))) {
+    throw new HttpsError("invalid-argument", "bookingId, valid status and optional integer price are required.");
   }
   const ref = db.doc(`bookings/${bookingId}`);
   await db.runTransaction(async (tx) => {
@@ -137,11 +143,17 @@ export const updateCenterBooking = onCall(async (request) => {
     if (!snap.exists || snap.get("centerId") !== membership.centerId) {
       throw new HttpsError("not-found", "Booking not found.");
     }
-    const current = snap.get("status");
-    if (!transitions[current]?.has(status)) {
+    const current = String(snap.get("status") ?? "");
+    const target = statusToStored[status];
+    if (!transitions[current]?.has(target)) {
       throw new HttpsError("failed-precondition", "Invalid booking status transition.");
     }
-    tx.update(ref, { status, updatedAt: FieldValue.serverTimestamp() });
+    if (status === "confirmed" && price === undefined && Number(snap.get("price") ?? 0) <= 0) {
+      throw new HttpsError("failed-precondition", "Set the center-approved price before confirming the booking.");
+    }
+    const patch: Record<string, unknown> = { status: target, updatedAt: FieldValue.serverTimestamp() };
+    if (price !== undefined) patch.price = price;
+    tx.update(ref, patch);
   });
   return { success: true };
 });
