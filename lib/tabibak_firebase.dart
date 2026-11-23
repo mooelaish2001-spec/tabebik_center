@@ -47,7 +47,7 @@ class Fb {
   static String? get uid => user?.uid;
   static String get phone => user?.phoneNumber ?? '';
 
-  /// يهيّئ Firebase. إن فشل (لا إعدادات) يبقى on=false ويعمل التطبيق بالوضع التجريبي.
+  /// يهيّئ Firebase. إن فشل الإعداد يبقى on=false وتظل وظائف المركز مقفلة.
   /// لإيقافه عمداً: --dart-define=FIREBASE=false
   static Future<void> init() async {
     if (!const bool.fromEnvironment('FIREBASE', defaultValue: true)) return;
