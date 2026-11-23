@@ -525,7 +525,7 @@ class Db extends ChangeNotifier {
           (pData['spec'] ?? '') as String,
           (pData['quals'] ?? '') as String,
           '${pData['exp'] ?? 0}',
-          gender: pData['female'] == true ? 1 : 0,
+          gender: pData['female'] == true || ((pData['gender'] ?? 0) as num).toInt() == 1 ? 1 : 0,
           phone: '',
           verified: pData['verified'] == true,
           claimed: pData['claimed'] == true,
