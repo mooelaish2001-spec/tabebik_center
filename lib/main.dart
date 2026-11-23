@@ -407,10 +407,9 @@ class Db extends ChangeNotifier {
       final member = await Fb.centerMember(phone);
       if (member == null || member['active'] == false) return false;
       final boundUid = (member['uid'] ?? '') as String;
-      if (boundUid.isNotEmpty && boundUid != Fb.uid) return false;
-      if (boundUid.isEmpty && Fb.uid != null) {
-        await Fb.saveMember(phone, {'uid': Fb.uid});
-      }
+      // Never let a new passkey claim an unbound staff phone by itself.
+      // A manager must bind the member UID through an approved invitation flow.
+      if (boundUid.isEmpty || boundUid != Fb.uid) return false;
       final cid = (member['centerId'] ?? '') as String;
       if (cid.isEmpty) return false;
       final row = await Fb.getCenter(cid);
@@ -952,8 +951,13 @@ class _LoginScreenState extends State<LoginScreen> {
       final ok = await db.loginRemote(ph);
       if (!mounted) return;
       if (!ok || db.me == null) {
+        final member = await Fb.centerMember(ph);
         await Fb.signOut();
         if (!mounted) return;
+        if (member != null && (member['uid'] ?? '').toString().isEmpty) {
+          snack(context, 'عضويتك موجودة، لكن مدير المركز يحتاج إلى ربط مفتاح المرور بحسابك قبل الدخول.');
+          return;
+        }
         snack(context, 'لم نعثر على عضوية مركز مرتبطة بهذا الحساب. يمكنك تسجيل مركز جديد.');
         Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => RegisterWizard(ph)), (r) => false);
         return;
