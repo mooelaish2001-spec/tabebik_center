@@ -1,11 +1,55 @@
 rules_version = '2';
 
-// TEMPORARY SAFE BASELINE.
-// This denies all client access. Do NOT deploy as production rules while the
-// apps require Storage access. Create and test coordinated role-based rules
-// for all three apps before deployment; Storage rules are project-wide.
 service firebase.storage {
   match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function phoneNumber() {
+      return signedIn() ? request.auth.token.phone_number : null;
+    }
+
+    function centerMember(centerId) {
+      return signedIn()
+        && phoneNumber() != null
+        && firestore.exists(/databases/(default)/documents/centerMembers/$(phoneNumber()))
+        && firestore.get(/databases/(default)/documents/centerMembers/$(phoneNumber())).data.centerId == centerId
+        && firestore.get(/databases/(default)/documents/centerMembers/$(phoneNumber())).data.active == true;
+    }
+
+    function centerManager(centerId) {
+      return centerMember(centerId)
+        && firestore.get(/databases/(default)/documents/centerMembers/$(phoneNumber())).data.role == 0;
+    }
+
+    function booking(bid) {
+      return firestore.get(/databases/(default)/documents/bookings/$(bid)).data;
+    }
+
+    function imageUpload() {
+      return request.resource != null
+        && request.resource.size < 6 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    match /receipts/{bookingId}/{fileName} {
+      allow write: if signedIn()
+        && imageUpload()
+        && booking(bookingId).patientUid == request.auth.uid;
+
+      allow read: if signedIn() && (
+        booking(bookingId).patientUid == request.auth.uid
+        || (booking(bookingId).centerId is string && centerMember(booking(bookingId).centerId))
+      );
+    }
+
+    match /licenses/{centerId}/{fileName} {
+      allow write: if centerManager(centerId) && imageUpload();
+      // Licenses remain private to the platform's review process.
+      allow read: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }
