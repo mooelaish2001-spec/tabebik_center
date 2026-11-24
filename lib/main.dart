@@ -932,13 +932,14 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() { busy = true; error = null; });
     try {
       try {
-        await passkey.signIn();
+        await passkey.signIn(pin: await requestSecurityPin(context));
       } on PasskeyAuthException catch (e) {
         if (e.code != 'passkey-not-found') rethrow;
         // First login on a new center/staff account: create a passkey bound
         // to the entered phone. Access is granted only if a center member
         // record exists for that phone.
         await passkey.registerAccount(
+            pin: await requestSecurityPin(context, confirm: true),
           displayName: 'مستخدم المركز',
           phone: ph,
         );
@@ -1038,6 +1039,7 @@ class _RegPhoneState extends State<RegisterPhoneScreen> {
     setState(() => busy = true);
     try {
       await passkey.registerAccount(
+            pin: await requestSecurityPin(context, confirm: true),
         displayName: 'مدير المركز',
         phone: ph,
       );
@@ -2880,4 +2882,73 @@ class TermsScreen extends StatelessWidget {
           Center(child: Text('نص مبدئي للعرض', style: t(11, w: FontWeight.w500, c: kGrey))),
         ]),
       );
+}
+
+
+Future<String> requestSecurityPin(BuildContext context, {bool confirm = false}) async {
+  final first = TextEditingController();
+  final second = TextEditingController();
+  String? error;
+  final result = await showDialog<String>(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: Text(confirm ? 'إنشاء PIN للحساب' : 'أدخل PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('PIN يتكون من 6 أرقام، ويُطلب بعد مفتاح المرور.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: first,
+              autofocus: true,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+              decoration: const InputDecoration(labelText: 'PIN', counterText: ''),
+            ),
+            if (confirm)
+              TextField(
+                controller: second,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(6)],
+                decoration: const InputDecoration(labelText: 'تأكيد PIN', counterText: ''),
+              ),
+            if (error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(error!, style: const TextStyle(color: Colors.red)),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (first.text.length != 6) {
+                setDialogState(() => error = 'أدخل 6 أرقام بالضبط.');
+                return;
+              }
+              if (confirm && first.text != second.text) {
+                setDialogState(() => error = 'الرقمان غير متطابقين.');
+                return;
+              }
+              Navigator.pop(dialogContext, first.text);
+            },
+            child: const Text('متابعة'),
+          ),
+        ],
+      ),
+    ),
+  );
+  first.dispose();
+  second.dispose();
+  return result ?? '';
 }
