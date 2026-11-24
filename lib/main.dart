@@ -932,7 +932,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() { busy = true; error = null; });
     try {
       try {
-        await passkey.signIn(pin: await requestSecurityPin(context));
+        await passkey.signIn(requestPin: () => requestSecurityPin(context));
       } on PasskeyAuthException catch (e) {
         if (e.code != 'passkey-not-found') rethrow;
         // First login on a new center/staff account: create a passkey bound
